@@ -40,12 +40,10 @@ const firebaseConfig = {
     measurementId: "G-ED0VERXNCS"
   };
 
-const DATABASE_ID = "ai-studio-banglamartecomme-93fd2b95-cc80-47a3-942d-1784471f43cf";
-
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app, DATABASE_ID);
+const db = getFirestore(app);
 
 export { 
   app, 
