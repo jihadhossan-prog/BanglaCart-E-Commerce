@@ -1,5 +1,5 @@
 // Firebase Configuration and Initialization
-import { initializeApp } from 'firebase/app';
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
@@ -8,7 +8,7 @@ import {
   onAuthStateChanged,
   sendPasswordResetEmail,
   updateProfile
-} from 'firebase/auth';
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import { 
   getFirestore, 
   collection, 
@@ -27,18 +27,18 @@ import {
   onSnapshot, 
   serverTimestamp,
   increment
-} from 'firebase/firestore';
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
-    apiKey: "AIzaSyDPT3fRRT8m_zHlpEfo3wuuWe2NRsHHUqs",
-    authDomain: "jihad-4b833.firebaseapp.com",
-    databaseURL: "https://jihad-4b833-default-rtdb.firebaseio.com",
-    projectId: "jihad-4b833",
-    storageBucket: "jihad-4b833.firebasestorage.app",
-    messagingSenderId: "668587419972",
-    appId: "1:668587419972:web:56e7ceb7bfc7a69af7cf11",
-    measurementId: "G-ED0VERXNCS"
-  };
+  apiKey: "AIzaSyDPT3fRRT8m_zHlpEfo3wuuWe2NRsHHUqs",
+  authDomain: "jihad-4b833.firebaseapp.com",
+  databaseURL: "https://jihad-4b833-default-rtdb.firebaseio.com",
+  projectId: "jihad-4b833",
+  storageBucket: "jihad-4b833.firebasestorage.app",
+  messagingSenderId: "668587419972",
+  appId: "1:668587419972:web:56e7ceb7bfc7a69af7cf11",
+  measurementId: "G-ED0VERXNCS"
+};
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
