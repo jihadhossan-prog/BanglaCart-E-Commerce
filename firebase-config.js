@@ -30,13 +30,15 @@ import {
 } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAI_saG53zu7-cG2ZTcOH66-oKYQZ1FRZc",
-  authDomain: "gen-lang-client-0746423772.firebaseapp.com",
-  projectId: "gen-lang-client-0746423772",
-  storageBucket: "gen-lang-client-0746423772.firebasestorage.app",
-  messagingSenderId: "772887422846",
-  appId: "1:772887422846:web:3216bff1d2521e328cb52f"
-};
+    apiKey: "AIzaSyDPT3fRRT8m_zHlpEfo3wuuWe2NRsHHUqs",
+    authDomain: "jihad-4b833.firebaseapp.com",
+    databaseURL: "https://jihad-4b833-default-rtdb.firebaseio.com",
+    projectId: "jihad-4b833",
+    storageBucket: "jihad-4b833.firebasestorage.app",
+    messagingSenderId: "668587419972",
+    appId: "1:668587419972:web:56e7ceb7bfc7a69af7cf11",
+    measurementId: "G-ED0VERXNCS"
+  };
 
 const DATABASE_ID = "ai-studio-banglamartecomme-93fd2b95-cc80-47a3-942d-1784471f43cf";
 
@@ -72,3 +74,4 @@ export {
   serverTimestamp,
   increment
 };
+
