@@ -1,3 +1,5 @@
+import './style.css';
+import './pages.css';
 import { initAuthListener, getCurrentUserData, loginUser, registerUser, loginWithGoogle, logoutUser } from './auth.js';
 import { initShop, renderWishlistPage, renderCategorySections, renderProductCardHTML } from './shop.js';
 import { initCart, renderCartPage, renderCheckoutPage, submitOrder } from './cart-checkout.js';

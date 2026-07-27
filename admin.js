@@ -1,3 +1,5 @@
+import './style.css';
+import './admin.css';
 import { db, auth } from './firebase-config.js';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, orderBy, onSnapshot, addDoc } from 'firebase/firestore';
