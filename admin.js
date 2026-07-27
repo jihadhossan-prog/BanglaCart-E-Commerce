@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
       showToast('এডমিন এক্সেসের জন্য লগইন প্রয়োজন', 'error');
-      setTimeout(() => window.location.href = '/', 1000);
+      setTimeout(() => window.location.href = './index.html', 1000);
       return;
     }
 
@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       if (!userDoc.exists() || userDoc.data().role !== 'admin') {
         showToast('অনুমতি নেই — এটি শুধুমাত্র এডমিনদের জন্য', 'error');
-        setTimeout(() => window.location.href = '/', 1000);
+        setTimeout(() => window.location.href = './index.html', 1000);
         return;
       }
       
