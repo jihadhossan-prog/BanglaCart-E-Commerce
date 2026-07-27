@@ -1,43 +1,107 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
+// Firebase Configuration & Initialization
+import { initializeApp, getApps, getApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { 
+  getAuth, 
+  onAuthStateChanged, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut, 
+  sendPasswordResetEmail,
+  updateProfile
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  getDoc, 
+  getDocs, 
+  setDoc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  query, 
+  where, 
+  orderBy, 
+  limit, 
+  startAfter, 
+  onSnapshot, 
+  serverTimestamp,
+  getDocFromServer,
+  increment
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { 
+  getStorage, 
+  ref, 
+  uploadBytes, 
+  getDownloadURL 
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
-// Firebase configuration placeholder - fill in with your Firebase Project credentials
+// Firebase credentials placeholder - Replace with actual project credentials
 export const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || ""
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  storageBucket: "",
+  messagingSenderId: "",
+  appId: ""
 };
 
-// Initialize Firebase App
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+// Check if config values are filled
+export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
 
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
-
-// Connectivity validation check
-export async function validateFirebaseConnection() {
-  if (!firebaseConfig.projectId) {
-    console.warn("Firebase config is empty. Application using local state fallback.");
-    return false;
+// Initialize Firebase App safely
+let app;
+if (!getApps().length) {
+  if (isFirebaseConfigured) {
+    app = initializeApp(firebaseConfig);
+  } else {
+    // Provide a dummy app structure for local demo fallback or unconfigured state
+    console.warn("AponBazar: Firebase credentials not set yet. Please enter firebaseConfig credentials in firebase-config.js");
   }
+} else {
+  app = getApp();
+}
+
+export const auth = app ? getAuth(app) : null;
+export const db = app ? getFirestore(app) : null;
+export const storage = app ? getStorage(app) : null;
+
+// Error Handler for Firestore Permission & Network Errors
+export function handleFirestoreError(error, operationType, path) {
+  const authUser = auth ? auth.currentUser : null;
+  const errInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: authUser ? authUser.uid : null,
+      email: authUser ? authUser.email : null,
+      emailVerified: authUser ? authUser.emailVerified : null,
+      isAnonymous: authUser ? authUser.isAnonymous : null
+    },
+    operationType,
+    path
+  };
+  console.error("Firestore Operation Error:", errInfo);
+  return errInfo;
+}
+
+// Connection Validation Helper
+export async function validateFirestoreConnection() {
+  if (!db) return false;
   try {
-    await getDocFromServer(doc(db, 'settings', 'connection_test'));
-    console.log("Connected to Firebase Firestore successfully.");
+    await getDocFromServer(doc(db, "settings", "connection_test"));
     return true;
   } catch (error) {
-    if (error instanceof Error && error.message.includes('client is offline')) {
-      console.warn("Firebase client offline or config incomplete.");
-    } else {
-      console.log("Firebase connection initialized.");
+    if (error.message && error.message.includes("offline")) {
+      console.warn("Firestore client appears offline or misconfigured.");
     }
     return false;
   }
 }
 
-export default app;
+export {
+  collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
+  query, where, orderBy, limit, startAfter, onSnapshot, serverTimestamp, increment,
+  ref, uploadBytes, getDownloadURL,
+  onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
+  signOut, sendPasswordResetEmail, updateProfile
+};

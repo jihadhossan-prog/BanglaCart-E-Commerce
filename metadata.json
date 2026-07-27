@@ -1,6 +1,6 @@
 {
-  "name": "BanglaCart E-Commerce",
-  "description": "Mobile-first premium e-commerce app with real-time Firebase backend, admin dashboard, live chat, and bKash/Nagad payments.",
+  "name": "AponBazar — Premium E-Commerce",
+  "description": "Mobile-first Bangladeshi E-Commerce platform with real-time Firebase backend, admin dashboard, live chat, bKash/Nagad support, and PWA capabilities.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

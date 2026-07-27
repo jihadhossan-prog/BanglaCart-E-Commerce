@@ -1,377 +1,484 @@
-import { db, auth } from './firebase-config.js';
-import { collection, getDocs, doc, getDoc, query, where, orderBy, limit, startAfter, setDoc, deleteDoc } from 'firebase/firestore';
-import { formatPrice, showToast, checkAndSeedInitialData, DEFAULT_CATEGORIES, DEFAULT_PRODUCTS } from './core.js';
-import { addToCart } from './cart-checkout.js';
+// Product Catalog, Category Pagination ("আরও"), and Search Engine
+import { 
+  db, 
+  collection, 
+  getDocs, 
+  getDoc, 
+  doc, 
+  query, 
+  where, 
+  orderBy, 
+  limit, 
+  startAfter, 
+  addDoc, 
+  serverTimestamp 
+} from "./firebase-config.js";
+import { formatPrice, escapeHtml, getImageUrl, showToast } from "./core.js";
+import { addToCart } from "./cart-checkout.js";
+import { toggleWishlist, isInWishlist } from "./app.js";
 
-let allCategories = [];
-let categoryPaginations = {}; // Tracks pagination state per category: { [catId]: { lastDoc, productsCount, hasMore } }
-let wishlistProductIds = new Set();
+// State tracking per category grid for "আরও" (Load More) pagination
+const categoryState = {};
 
-// --- Initialize Shop ---
-export async function initShop() {
-  await checkAndSeedInitialData();
-  await loadCategories();
-  await loadWishlistIds();
-  await renderCategorySections();
-}
-
-// --- Load Wishlist IDs ---
-export async function loadWishlistIds() {
-  wishlistProductIds.clear();
-  if (!auth.currentUser) {
-    const localW = JSON.parse(localStorage.getItem('wishlist') || '[]');
-    localW.forEach(id => wishlistProductIds.add(id));
-    updateWishlistBadge();
-    return;
+// Default Fallback Products (Only used if Firestore database is empty)
+const DEFAULT_PRODUCTS = [
+  {
+    id: "prod-1",
+    title: "প্রিমিয়াম কটোন পাঞ্জাবি - রয়েল ব্লু",
+    category: "panjabi",
+    brand: "আপন ফ্যাশন",
+    sku: "PF-101",
+    price: 1850,
+    discountPrice: 1450,
+    deliveryCharge: 60,
+    stock: 25,
+    rating: 4.8,
+    badge: "হট ডিল",
+    images: ["https://images.unsplash.com/photo-1597983073493-88cd35cf93b0?w=500&q=80"],
+    specifications: { "ফেব্রিক": "১০০% প্রিমিয়াম সুতি", "সাইজ": "M, L, XL, XXL", "মেড ইন": "বাংলাদেশ" },
+    description: "আরামদায়ক কাপড়ে তৈরি আভিজাত্যপূর্ণ ডিজাইনের পাঞ্জাবি। ঈদ এবং যেকোনো উৎসবের জন্য সেরা পছন্দ।"
+  },
+  {
+    id: "prod-2",
+    title: "স্মার্ট ওয়াচ প্রো টি-৯০০ আল্ট্রা",
+    category: "electronics",
+    brand: "স্মার্টটেক",
+    sku: "ST-900",
+    price: 2200,
+    discountPrice: 1650,
+    deliveryCharge: 80,
+    stock: 12,
+    rating: 4.6,
+    badge: "অফার",
+    images: ["https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80"],
+    specifications: { "ডিসপ্লে": "২.০১ ইঞ্চি HD", "ব্যাটারি": "৩৮০ mAh", "ওয়ারেন্টি": "৬ মাস" },
+    description: "ব্লুটুথ কলিং, হার্ট রেট ও স্লিপ মনিটরিং সমৃদ্ধ আধুনিক আল্ট্রা স্মার্টওয়াচ।"
+  },
+  {
+    id: "prod-3",
+    title: "অর্গানিক সরিষার তেল - ১ লিটার",
+    category: "groceries",
+    brand: "আপন ফুড",
+    sku: "AF-OIL-1",
+    price: 360,
+    discountPrice: 320,
+    deliveryCharge: 50,
+    stock: 50,
+    rating: 4.9,
+    badge: "অর্গানিক",
+    images: ["https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=500&q=80"],
+    specifications: { "ওজন": "১ লিটার", "উৎপাদন": "কাঠের ঘানি ভাঙা" },
+    description: "শতভাগ খাঁটি কাঠের ঘানিতে ভাঙা খাঁটি সরিষার তেল।"
+  },
+  {
+    id: "prod-4",
+    title: "লেদার ওয়ালেট ও বেল্ট কম্বো সেট",
+    category: "fashion",
+    brand: "রয়েল লেদার",
+    sku: "RL-COMBO",
+    price: 1950,
+    discountPrice: 1390,
+    deliveryCharge: 60,
+    stock: 18,
+    rating: 4.7,
+    badge: "কম্বো",
+    images: ["https://images.unsplash.com/photo-1627123424574-724758594e93?w=500&q=80"],
+    specifications: { "উপাদান": "১০০% খাঁটি চামড়া", "রং": "চকলেট ব্রাউন" },
+    description: "প্রাকৃতিক আসল চামড়ায় তৈরি ওয়ালেট ও এডজাস্টেবল বেল্ট কম্বো সেট।"
+  },
+  {
+    id: "prod-5",
+    title: "ওয়্যারলেস নয়েজ ক্যানসেলিং হেডফোন",
+    category: "electronics",
+    brand: "সাউন্ডপ্রো",
+    sku: "SP-HEAD-2",
+    price: 3500,
+    discountPrice: 2800,
+    deliveryCharge: 70,
+    stock: 8,
+    rating: 4.9,
+    badge: "সেরা সেলার",
+    images: ["https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&q=80"],
+    specifications: { "প্লেটাইম": "৪০ ঘণ্টা", "কানেক্টিভিটি": "ব্লুটুথ ৫.৩" },
+    description: "ডিপ বেস ও অ্যাক্টিভ নয়েজ ক্যানসেলেশন সহ দীর্ঘ ব্যাটারি লাইফের প্রিমিয়াম হেডফোন।"
   }
+];
+
+// Default Empty Categories Export
+export const DEFAULT_CATEGORIES = [];
+
+// Fetch Products For a Category with 2-Row (4 Products) Initial Batch
+export async function fetchCategoryProducts(categoryId, isLoadMore = false) {
+  if (!db) return { products: [], lastVisibleDoc: null, hasMore: false };
+
+  const state = categoryState[categoryId] || {
+    products: [],
+    lastVisibleDoc: null,
+    hasMore: true
+  };
+
+  if (!isLoadMore) {
+    state.products = [];
+    state.lastVisibleDoc = null;
+    state.hasMore = true;
+  }
+
+  if (!state.hasMore && isLoadMore) return state;
+
   try {
-    const q = query(collection(db, 'wishlist'), where('userId', '==', auth.currentUser.uid));
-    const snap = await getDocs(q);
-    snap.forEach(d => wishlistProductIds.add(d.data().productId));
-    updateWishlistBadge();
-  } catch (e) {
-    console.warn("Wishlist fetch fallback:", e);
-  }
-}
+    let q;
+    const batchLimit = 4; // Exactly 2 rows on mobile (2 cols x 2 rows = 4 products)
 
-function updateWishlistBadge() {
-  const badge = document.getElementById('wishlist-badge');
-  if (badge) {
-    if (wishlistProductIds.size > 0) {
-      badge.textContent = wishlistProductIds.size;
-      badge.classList.remove('hidden');
-    } else {
-      badge.classList.add('hidden');
-    }
-  }
-}
-
-// --- Toggle Wishlist ---
-export async function toggleWishlist(productId) {
-  const isWishlisted = wishlistProductIds.has(productId);
-  if (isWishlisted) {
-    wishlistProductIds.delete(productId);
-    showToast('উইশলিস্ট থেকে সরানো হয়েছে', 'info');
-  } else {
-    wishlistProductIds.add(productId);
-    showToast('উইশলিস্টে যোগ করা হয়েছে!', 'success');
-  }
-  
-  localStorage.setItem('wishlist', JSON.stringify(Array.from(wishlistProductIds)));
-  updateWishlistBadge();
-  
-  if (auth.currentUser) {
-    try {
-      const wishRef = doc(db, 'wishlist', `${auth.currentUser.uid}_${productId}`);
-      if (!isWishlisted) {
-        await setDoc(wishRef, {
-          userId: auth.currentUser.uid,
-          productId: productId,
-          createdAt: new Date().toISOString()
-        });
+    if (categoryId === "all") {
+      if (state.lastVisibleDoc) {
+        q = query(collection(db, "products"), orderBy("createdAt", "desc"), startAfter(state.lastVisibleDoc), limit(batchLimit));
       } else {
-        await deleteDoc(wishRef);
+        q = query(collection(db, "products"), orderBy("createdAt", "desc"), limit(batchLimit));
+      }
+    } else {
+      if (state.lastVisibleDoc) {
+        q = query(collection(db, "products"), where("category", "==", categoryId), startAfter(state.lastVisibleDoc), limit(batchLimit));
+      } else {
+        q = query(collection(db, "products"), where("category", "==", categoryId), limit(batchLimit));
+      }
+    }
+
+    const snapshot = await getDocs(q);
+    
+    if (snapshot.empty && !isLoadMore) {
+      state.products = [];
+      state.hasMore = false;
+    } else {
+      const newItems = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      state.products = [...state.products, ...newItems];
+      state.lastVisibleDoc = snapshot.docs[snapshot.docs.length - 1] || null;
+      state.hasMore = snapshot.docs.length === batchLimit;
+    }
+
+    categoryState[categoryId] = state;
+    return state;
+  } catch (err) {
+    console.warn("Firestore products fetch failed:", err);
+    state.products = [];
+    state.hasMore = false;
+    categoryState[categoryId] = state;
+    return state;
+  }
+}
+
+// Render Product Card Component
+export function renderProductCard(product) {
+  const isWished = isInWishlist(product.id);
+  const deliveryText = product.deliveryCharge === 0 ? "ফ্রি ডেলিভারি" : `ডেলিভারি ${formatPrice(product.deliveryCharge)}`;
+
+  return `
+    <div class="product-card" data-product-id="${product.id}">
+      <div class="product-image-wrap cursor-pointer" onclick="window.viewProductDetail('${product.id}')">
+        <img src="${getImageUrl(product.images?.[0])}" alt="${escapeHtml(product.title)}" loading="lazy">
+        ${product.badge ? `<span class="badge-discount">${escapeHtml(product.badge)}</span>` : ''}
+        
+        <!-- Wishlist Button -->
+        <button 
+          onclick="event.stopPropagation(); window.toggleWishlistClick('${product.id}')"
+          class="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center text-slate-600 active:scale-95 transition-all"
+        >
+          <svg class="w-4 h-4 ${isWished ? 'fill-red-500 text-red-500' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="product-details">
+        <h3 class="product-title cursor-pointer" onclick="window.viewProductDetail('${product.id}')">
+          ${escapeHtml(product.title)}
+        </h3>
+
+        <div class="flex items-center gap-1 text-amber-500 text-xs mb-1">
+          <span>★</span>
+          <span class="font-bold text-slate-700">${product.rating || 4.8}</span>
+          <span class="text-slate-400 text-[10px]">(${product.brand || 'আপন'})</span>
+        </div>
+
+        <div class="product-price-row">
+          <span class="current-price">${formatPrice(product.discountPrice || product.price)}</span>
+          ${product.discountPrice ? `<span class="original-price">${formatPrice(product.price)}</span>` : ''}
+        </div>
+
+        <!-- Per-Product Delivery Charge Badge (Mandatory Display) -->
+        <span class="delivery-tag">${deliveryText}</span>
+
+        <!-- Quick Add to Cart Button -->
+        <button 
+          onclick="event.stopPropagation(); window.quickAddToCart('${product.id}')"
+          class="mt-2.5 w-full bg-emerald-700 hover:bg-emerald-800 text-white font-semibold py-1.5 px-3 rounded-lg text-xs flex items-center justify-center gap-1 active:scale-95 transition-all"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          <span>কার্টে যোগ করুন</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+// Render Home Page Category Sections with Dynamic Banners and Categories from Firestore
+export async function renderHomeCategorySections(containerEl) {
+  containerEl.innerHTML = `
+    <div class="py-12 text-center text-slate-400 text-xs">
+      ডাটা লোড হচ্ছে...
+    </div>
+  `;
+
+  let banners = [];
+  let categories = [];
+
+  if (db) {
+    try {
+      const [bannerSnap, catSnap] = await Promise.all([
+        getDocs(query(collection(db, "banners"), orderBy("createdAt", "desc"))),
+        getDocs(query(collection(db, "categories"), orderBy("createdAt", "desc")))
+      ]);
+
+      if (!bannerSnap.empty) {
+        banners = bannerSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      }
+      if (!catSnap.empty) {
+        categories = catSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       }
     } catch (e) {
-      console.warn("Wishlist sync err:", e);
+      console.warn("Failed to load home sections from Firestore:", e);
     }
   }
-  
-  // Re-render button icon state if visible
-  document.querySelectorAll(`.wish-btn-${productId}`).forEach(btn => {
-    btn.classList.toggle('active', wishlistProductIds.has(productId));
-  });
-}
 
-// --- Load Categories ---
-export async function loadCategories() {
-  try {
-    const snap = await getDocs(collection(db, 'categories'));
-    if (!snap.empty) {
-      allCategories = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    } else {
-      allCategories = DEFAULT_CATEGORIES;
-    }
-  } catch (e) {
-    allCategories = DEFAULT_CATEGORIES;
-  }
-  renderCategoriesGrid();
-}
+  let html = ``;
 
-function renderCategoriesGrid() {
-  const container = document.getElementById('categories-grid');
-  if (!container) return;
-  
-  container.innerHTML = allCategories.map(cat => `
-    <div class="category-card" onclick="window.scrollToCategorySection('${cat.id}')">
-      <div class="category-icon-wrap">
-        ${cat.image ? `<img src="${cat.image}" alt="${cat.name}"/>` : `<span class="font-bold text-lg">${cat.name.charAt(0)}</span>`}
+  // 1. Hero Slider Banner (Only if added by admin)
+  if (banners.length > 0) {
+    html += `
+      <div class="hero-slider mb-4 relative overflow-hidden rounded-2xl bg-slate-100">
+        <div class="hero-slides-wrapper flex transition-transform duration-500 ease-out" id="hero-slider-track">
+          ${banners.map(b => `
+            <div class="w-full shrink-0 relative aspect-[21/9]">
+              <a href="${escapeHtml(b.link || '#')}">
+                <img src="${getImageUrl(b.imageUrl)}" alt="${escapeHtml(b.title || 'Banner')}" class="w-full h-full object-cover">
+                ${b.title ? `<div class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-slate-900/80 to-transparent p-3 text-white text-xs font-bold">${escapeHtml(b.title)}</div>` : ''}
+              </a>
+            </div>
+          `).join('')}
+        </div>
       </div>
-      <span class="category-name">${cat.name}</span>
-    </div>
-  `).join('');
-}
-
-window.scrollToCategorySection = function(catId) {
-  const elem = document.getElementById(`cat-section-${catId}`);
-  if (elem) {
-    elem.scrollIntoView({ behavior: 'smooth' });
+    `;
   }
-};
 
-// --- Render Per-Category Product Sections ---
-// Mandatory: Mobile ~360-414px 2 columns, initial 2 rows (4 products), "আরও" compact text link at bottom-right of grid.
-export async function renderCategorySections() {
-  const container = document.getElementById('category-sections-container');
-  if (!container) return;
-  
-  container.innerHTML = '';
-  
-  for (const cat of allCategories) {
-    const section = document.createElement('div');
-    section.id = `cat-section-${cat.id}`;
-    section.className = 'space-y-3';
-    
+  // 2. Category Pill Fast Selector (Only if added by admin)
+  if (categories.length > 0) {
+    html += `
+      <div class="mb-5">
+        <h2 class="text-sm font-bold text-slate-800 mb-2.5 px-1">জনপ্রিয় ক্যাটাগরি</h2>
+        <div class="flex gap-2.5 overflow-x-auto pb-2 scrollbar-none">
+          ${categories.map(cat => `
+            <a href="#category-${cat.slug || cat.id}" class="category-pill shrink-0 flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-xl">
+              <div class="w-8 h-8 rounded-lg overflow-hidden bg-slate-100 shrink-0">
+                <img src="${getImageUrl(cat.imageUrl)}" class="w-full h-full object-cover" alt="${escapeHtml(cat.name)}">
+              </div>
+              <span class="text-[11px] font-semibold text-slate-700 whitespace-nowrap pr-1">${escapeHtml(cat.name)}</span>
+            </a>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  // 3. Category Sections Container
+  if (categories.length === 0 && banners.length === 0) {
+    html += `
+      <div class="bg-white border border-slate-200 rounded-2xl p-8 text-center my-6 space-y-3 max-w-md mx-auto">
+        <div class="w-14 h-14 bg-emerald-50 text-emerald-700 rounded-full flex items-center justify-center mx-auto">
+          <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+        </div>
+        <h3 class="text-sm font-bold text-slate-900">কোনো তথ্য যুক্ত করা হয়নি</h3>
+        <p class="text-xs text-slate-500">এডমিন প্যানেল থেকে স্লাইডার ব্যানার ও ক্যাটাগরি যুক্ত করলে এখানে লাইভ দেখা যাবে।</p>
+      </div>
+    `;
+  } else {
+    html += `<div id="category-sections-wrapper" class="space-y-6"></div>`;
+  }
+
+  containerEl.innerHTML = html;
+
+  // Initialize slider auto-advance if multiple banners
+  if (banners.length > 1) {
+    let currentSlide = 0;
+    const track = document.getElementById("hero-slider-track");
+    if (track) {
+      setInterval(() => {
+        currentSlide = (currentSlide + 1) % banners.length;
+        track.style.transform = `translateX(-${currentSlide * 100}%)`;
+      }, 4000);
+    }
+  }
+
+  // Render products per category
+  const sectionsWrapper = document.getElementById("category-sections-wrapper");
+  if (!sectionsWrapper || categories.length === 0) return;
+
+  for (const cat of categories) {
+    const catId = cat.slug || cat.id;
+    const section = document.createElement("section");
+    section.className = "category-block";
+    section.id = `section-cat-${catId}`;
+
     section.innerHTML = `
-      <div class="flex items-center justify-between border-b border-slate-200 pb-2">
-        <h3 class="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
-          <span class="w-1.5 h-4 bg-amber-500 rounded-full"></span>
-          <span>${cat.name}</span>
-        </h3>
+      <div class="flex items-center justify-between mb-3 px-1">
+        <h2 class="text-base font-bold text-slate-900 border-l-4 border-emerald-600 pl-2">
+          ${escapeHtml(cat.name)}
+        </h2>
       </div>
-      <div id="grid-${cat.id}" class="product-grid">
-        <div class="skeleton h-48 w-full"></div>
-        <div class="skeleton h-48 w-full"></div>
+
+      <div class="category-product-grid" id="grid-cat-${catId}">
+        ${[1, 2, 3, 4].map(() => `<div class="product-card h-64 skeleton"></div>`).join('')}
       </div>
-      <div class="flex justify-end pt-1">
-        <button id="more-btn-${cat.id}" class="category-more-link hidden" onclick="window.loadMoreCategoryProducts('${cat.id}')">
+
+      <div class="flex justify-end mt-2" id="more-container-${catId}"></div>
+    `;
+
+    sectionsWrapper.appendChild(section);
+
+    const state = await fetchCategoryProducts(catId, false);
+    const gridEl = document.getElementById(`grid-cat-${catId}`);
+    const moreEl = document.getElementById(`more-container-${catId}`);
+
+    if (state.products.length === 0) {
+      gridEl.innerHTML = `<div class="col-span-2 py-6 text-center text-xs text-slate-400 bg-white border border-slate-100 rounded-xl">এই ক্যাটাগরিতে এখনো কোনো পণ্য যুক্ত করা হয়নি</div>`;
+    } else {
+      gridEl.innerHTML = state.products.map(p => renderProductCard(p)).join('');
+    }
+
+    if (state.hasMore) {
+      moreEl.innerHTML = `
+        <button class="load-more-link" onclick="window.expandCategoryGrid('${catId}')">
           <span>আরও</span>
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
         </button>
-      </div>
-    `;
-    
-    container.appendChild(section);
-    
-    // Initial fetch for category: 4 products (2 rows x 2 cols on mobile)
-    await loadCategoryProductsInitial(cat.id);
+      `;
+    }
   }
 }
 
-async function loadCategoryProductsInitial(catId) {
-  const grid = document.getElementById(`grid-${catId}`);
-  const moreBtn = document.getElementById(`more-btn-${catId}`);
-  if (!grid) return;
-
-  try {
-    const q = query(
-      collection(db, 'products'),
-      where('category', '==', catId),
-      limit(5) // Fetch 5 to check if hasMore
-    );
-    const snap = await getDocs(q);
-    let products = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    
-    if (products.length === 0) {
-      // Fallback filter from DEFAULT_PRODUCTS
-      products = DEFAULT_PRODUCTS.filter(p => p.category === catId);
-    }
-    
-    const hasMore = products.length > 4;
-    const initialBatch = products.slice(0, 4);
-    
-    categoryPaginations[catId] = {
-      offset: 4,
-      allCatProducts: products,
-      hasMore: hasMore
-    };
-    
-    grid.innerHTML = initialBatch.map(p => renderProductCardHTML(p)).join('');
-    
-    if (hasMore && moreBtn) {
-      moreBtn.classList.remove('hidden');
-    } else if (moreBtn) {
-      moreBtn.classList.add('hidden');
-    }
-  } catch (e) {
-    console.warn("Category query fallback:", e);
-    const fallbackProducts = DEFAULT_PRODUCTS.filter(p => p.category === catId);
-    grid.innerHTML = fallbackProducts.slice(0, 4).map(p => renderProductCardHTML(p)).join('');
+// Handle "আরও" Expansion per Category in Place
+window.expandCategoryGrid = async function(categoryId) {
+  const moreContainer = document.getElementById(`more-container-${categoryId}`);
+  if (moreContainer) {
+    moreContainer.innerHTML = `<span class="text-xs text-slate-400 p-2">লোড হচ্ছে...</span>`;
   }
-}
 
-window.loadMoreCategoryProducts = async function(catId) {
-  const grid = document.getElementById(`grid-${catId}`);
-  const moreBtn = document.getElementById(`more-btn-${catId}`);
-  if (!grid) return;
-  
-  const state = categoryPaginations[catId] || { offset: 4 };
-  
-  try {
-    const q = query(
-      collection(db, 'products'),
-      where('category', '==', catId)
-    );
-    const snap = await getDocs(q);
-    let allProds = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    if (allProds.length === 0) allProds = DEFAULT_PRODUCTS.filter(p => p.category === catId);
-    
-    const nextOffset = state.offset + 4;
-    const batch = allProds.slice(state.offset, nextOffset);
-    
-    batch.forEach(p => {
-      grid.insertAdjacentHTML('beforeend', renderProductCardHTML(p));
-    });
-    
-    categoryPaginations[catId].offset = nextOffset;
-    if (nextOffset >= allProds.length) {
-      moreBtn.classList.add('hidden');
+  const state = await fetchCategoryProducts(categoryId, true);
+  const gridEl = document.getElementById(`grid-cat-${categoryId}`);
+
+  if (gridEl) {
+    gridEl.innerHTML = state.products.map(p => renderProductCard(p)).join('');
+  }
+
+  if (moreContainer) {
+    if (state.hasMore) {
+      moreContainer.innerHTML = `
+        <button class="load-more-link" onclick="window.expandCategoryGrid('${categoryId}')">
+          <span>আরও</span>
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+      `;
+    } else {
+      moreContainer.innerHTML = ``; // Hide when all products are loaded
     }
-  } catch (e) {
-    moreBtn.classList.add('hidden');
   }
 };
 
-// --- Product Card Component HTML ---
-export function renderProductCardHTML(product) {
-  const isWish = wishlistProductIds.has(product.id);
-  const delCharge = product.deliveryCharge !== undefined ? product.deliveryCharge : 60;
-  const delText = delCharge === 0 ? 'ফ্রি ডেলিভারি' : `ডেলিভারি চার্জ: ৳${delCharge}`;
+// Open Product Detail Modal
+window.viewProductDetail = async function(productId) {
+  let product = DEFAULT_PRODUCTS.find(p => p.id === productId);
 
-  return `
-    <div class="product-card">
-      <div class="product-card-image-wrap" onclick="window.viewProductDetails('${product.id}')">
-        <img src="${product.images && product.images[0] ? product.images[0] : 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600'}" alt="${product.name}" loading="lazy"/>
-        ${product.badge ? `<span class="product-badge">${product.badge}</span>` : ''}
-        <button class="product-wishlist-btn wish-btn-${product.id} ${isWish ? 'active' : ''}" onclick="event.stopPropagation(); window.handleToggleWishlist('${product.id}')" aria-label="উইশলিস্ট">
-          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-        </button>
-      </div>
-      <div class="product-card-body">
-        <h4 class="product-title" onclick="window.viewProductDetails('${product.id}')">${product.name}</h4>
-        <div class="product-price-row">
-          <span class="product-price">${formatPrice(product.price)}</span>
-          ${product.originalPrice ? `<span class="product-original-price">${formatPrice(product.originalPrice)}</span>` : ''}
-        </div>
-        <div class="product-delivery-tag">${delText}</div>
-        <button class="w-full btn-primary text-xs py-2 mt-1 rounded-xl" onclick="window.quickAddToCart('${product.id}')">
-          <span>কার্টে যোগ করুন</span>
-        </button>
-      </div>
-    </div>
-  `;
-}
+  if (!product && db) {
+    try {
+      const docSnap = await getDoc(doc(db, "products", productId));
+      if (docSnap.exists()) product = { id: docSnap.id, ...docSnap.data() };
+    } catch (e) {
+      console.warn("Error fetching product detail:", e);
+    }
+  }
 
-window.handleToggleWishlist = function(pId) {
-  toggleWishlist(pId);
-};
-
-window.quickAddToCart = async function(pId) {
-  let prod = null;
-  try {
-    const snap = await getDoc(doc(db, 'products', pId));
-    if (snap.exists()) prod = { id: snap.id, ...snap.data() };
-  } catch (e) {}
-  if (!prod) prod = DEFAULT_PRODUCTS.find(p => p.id === pId);
-  if (prod) addToCart(prod);
-};
-
-// --- View Product Details Modal/Section ---
-window.viewProductDetails = async function(productId) {
-  let product = null;
-  try {
-    const snap = await getDoc(doc(db, 'products', productId));
-    if (snap.exists()) product = { id: snap.id, ...snap.data() };
-  } catch (e) {}
-  if (!product) product = DEFAULT_PRODUCTS.find(p => p.id === productId);
-  
-  if (!product) return;
-
-  const detailCard = document.getElementById('product-detail-card');
-  if (!detailCard) return;
-
-  const mainImg = product.images && product.images[0] ? product.images[0] : 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600';
-  const delCharge = product.deliveryCharge !== undefined ? product.deliveryCharge : 60;
-
-  detailCard.innerHTML = `
-    <!-- Image Zoom & Gallery -->
-    <div class="space-y-3">
-      <div class="aspect-square bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 group relative">
-        <img id="main-product-img" src="${mainImg}" alt="${product.name}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-125 cursor-zoom-in" />
-      </div>
-      ${product.images && product.images.length > 1 ? `
-        <div class="flex items-center gap-2 overflow-x-auto pb-1">
-          ${product.images.map(img => `
-            <button onclick="document.getElementById('main-product-img').src='${img}'" class="w-14 h-14 rounded-xl border border-slate-200 overflow-hidden flex-shrink-0">
-              <img src="${img}" class="w-full h-full object-cover"/>
-            </button>
-          `).join('')}
-        </div>
-      ` : ''}
-    </div>
-
-    <!-- Details Column -->
-    <div class="space-y-4">
-      <div>
-        <span class="text-xs font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">${product.brand || 'BanglaCart Special'}</span>
-        <h1 class="text-lg sm:text-xl font-bold text-slate-900 mt-2">${product.name}</h1>
-        <p class="text-xs text-slate-500 mt-1">SKU: ${product.sku || 'N/A'} | স্টক: <span class="text-emerald-800 font-bold">${product.stock || 10} টি বাকি</span></p>
-      </div>
-
-      <div class="bg-slate-50 p-4 rounded-2xl space-y-1">
-        <div class="flex items-baseline gap-3">
-          <span class="text-2xl font-black text-emerald-800">${formatPrice(product.price)}</span>
-          ${product.originalPrice ? `<span class="text-sm text-slate-400 line-through">${formatPrice(product.originalPrice)}</span>` : ''}
-        </div>
-        <p class="text-xs font-semibold text-emerald-900">ডেলিভারি চার্জ: ${delCharge === 0 ? 'ফ্রি' : formatPrice(delCharge)}</p>
-      </div>
-
-      <div>
-        <h4 class="font-bold text-xs text-slate-700 uppercase tracking-wider mb-1">পণ্যের বিবরণ</h4>
-        <p class="text-xs text-slate-600 leading-relaxed">${product.description || 'উচ্চমানের সেরা কোয়ালিটি প্রোডাক্ট।'}</p>
-      </div>
-
-      ${product.specifications ? `
-        <div>
-          <h4 class="font-bold text-xs text-slate-700 uppercase tracking-wider mb-1">স্পেসিফিকেশন</h4>
-          <p class="text-xs text-slate-600">${product.specifications}</p>
-        </div>
-      ` : ''}
-
-      <div class="pt-2 flex items-center gap-3">
-        <button onclick="window.quickAddToCart('${product.id}')" class="flex-1 btn-outline text-sm py-3">
-          <span>কার্টে যোগ করুন</span>
-        </button>
-        <button onclick="window.quickAddToCart('${product.id}'); location.hash='#cart'" class="flex-1 btn-primary text-sm py-3">
-          <span>এখনই কিনুন</span>
-        </button>
-      </div>
-    </div>
-  `;
-
-  // Show Product View Section
-  document.querySelectorAll('.view-section').forEach(s => s.classList.add('hidden'));
-  document.getElementById('product-view')?.classList.remove('hidden');
-};
-
-// Render Wishlist Page
-export async function renderWishlistPage() {
-  const grid = document.getElementById('wishlist-grid');
-  if (!grid) return;
-  
-  if (wishlistProductIds.size === 0) {
-    grid.innerHTML = `<div class="col-span-full py-12 text-center text-slate-500 text-sm">আপনার উইশলিস্ট খালি আছে</div>`;
+  if (!product) {
+    showToast("পণ্য খুঁজে পাওয়া যায়নি", "error");
     return;
   }
-  
-  let products = [];
-  try {
-    const snap = await getDocs(collection(db, 'products'));
-    products = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => wishlistProductIds.has(p.id));
-  } catch (e) {}
-  if (products.length === 0) {
-    products = DEFAULT_PRODUCTS.filter(p => wishlistProductIds.has(p.id));
-  }
-  
-  grid.innerHTML = products.map(p => renderProductCardHTML(p)).join('');
-}
+
+  const mount = document.getElementById("product-modal-mount");
+  if (!mount) return;
+
+  mount.innerHTML = `
+    <div class="modal-backdrop" onclick="if(event.target===this) window.closeProductModal()">
+      <div class="modal-content p-4">
+        
+        <!-- Close Button -->
+        <button onclick="window.closeProductModal()" class="absolute top-3 right-3 p-1 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 min-h-[44px]">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+
+        <!-- Product Image Showcase -->
+        <div class="w-full aspect-square bg-slate-100 rounded-xl overflow-hidden mb-4 relative">
+          <img id="detail-main-img" src="${getImageUrl(product.images?.[0])}" class="w-full h-full object-cover transition-transform duration-300">
+        </div>
+
+        <!-- Product Info -->
+        <div class="mb-4">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">${escapeHtml(product.brand || 'আপন')}</span>
+            <span class="text-xs text-slate-400">SKU: ${escapeHtml(product.sku || 'N/A')}</span>
+          </div>
+          
+          <h2 class="text-lg font-bold text-slate-900 mb-2">${escapeHtml(product.title)}</h2>
+
+          <div class="flex items-baseline gap-3 mb-3">
+            <span class="text-xl font-bold text-emerald-700">${formatPrice(product.discountPrice || product.price)}</span>
+            ${product.discountPrice ? `<span class="text-sm text-slate-400 line-through">${formatPrice(product.price)}</span>` : ''}
+          </div>
+
+          <!-- Mandatory Delivery Charge Display -->
+          <div class="bg-blue-50 border border-blue-100 p-2.5 rounded-lg text-xs text-blue-900 flex items-center justify-between mb-3">
+            <span>ডেলিভারি চার্জ (প্রতিটি পণ্য):</span>
+            <span class="font-bold text-blue-700">${product.deliveryCharge === 0 ? 'ফ্রি ডেলিভারি' : formatPrice(product.deliveryCharge)}</span>
+          </div>
+
+          <p class="text-xs text-slate-600 leading-relaxed mb-4">${escapeHtml(product.description)}</p>
+
+          <!-- Specifications Table -->
+          ${product.specifications ? `
+            <div class="border-t border-slate-200 pt-3 mb-4">
+              <h4 class="text-xs font-bold text-slate-800 mb-2">স্পেসিফিকেশন:</h4>
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                ${Object.entries(product.specifications).map(([k, v]) => `
+                  <div class="bg-slate-50 p-2 rounded"><span class="text-slate-400">${escapeHtml(k)}:</span> <span class="font-medium text-slate-800">${escapeHtml(v)}</span></div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- Stock & Action Buttons -->
+          <div class="flex items-center gap-3 mt-4">
+            <button 
+              onclick="window.quickAddToCart('${product.id}'); window.closeProductModal()"
+              class="flex-1 bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 px-4 rounded-xl text-sm min-h-[44px] flex items-center justify-center gap-2"
+            >
+              <span>কার্টে যোগ করুন</span>
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  `;
+};
+
+window.closeProductModal = function() {
+  const mount = document.getElementById("product-modal-mount");
+  if (mount) mount.innerHTML = "";
+};

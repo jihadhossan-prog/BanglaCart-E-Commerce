@@ -1,140 +1,176 @@
-import { auth, db } from './firebase-config.js';
+// User Authentication & Role Management Module
 import { 
-  createUserWithEmailAndPassword, 
+  auth, 
+  db, 
   signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
   signOut, 
-  onAuthStateChanged,
   sendPasswordResetEmail,
-  GoogleAuthProvider,
-  signInWithPopup,
-  updateProfile
-} from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { showToast } from './core.js';
+  onAuthStateChanged,
+  doc, 
+  getDoc, 
+  setDoc, 
+  updateDoc,
+  serverTimestamp,
+  handleFirestoreError
+} from "./firebase-config.js";
+import { showToast } from "./core.js";
 
-let currentUserData = null;
+export let currentUser = null;
+export let currentUserProfile = null;
 
-// --- Get Current Auth User & User Profile Document ---
-export function getCurrentUserData() {
-  return currentUserData;
+// Register New Customer
+export async function registerCustomer({ fullName, email, password, phone }) {
+  if (!auth || !db) {
+    showToast("Firebase configured required for registration", "error");
+    throw new Error("Firebase not initialized");
+  }
+
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+
+    const userProfile = {
+      uid: user.uid,
+      fullName: fullName.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone.trim(),
+      role: "customer", // Default mandatory role
+      avatarUrl: "",
+      division: "",
+      district: "",
+      upazila: "",
+      area: "",
+      address: "",
+      createdAt: new Date().toISOString()
+    };
+
+    await setDoc(doc(db, "users", user.uid), userProfile);
+    currentUserProfile = userProfile;
+    showToast("Account created successfully!");
+    return userProfile;
+  } catch (error) {
+    handleFirestoreError(error, "write", "users");
+    showToast(error.message || "Registration failed", "error");
+    throw error;
+  }
 }
 
-export function getCurrentUser() {
-  return auth.currentUser;
+// Login Customer or Admin
+export async function loginUser(email, password) {
+  if (!auth || !db) {
+    showToast("Firebase config required", "error");
+    throw new Error("Firebase not initialized");
+  }
+
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+    
+    // Fetch user profile & role
+    const profileDoc = await getDoc(doc(db, "users", user.uid));
+    let profile = null;
+
+    if (profileDoc.exists()) {
+      profile = profileDoc.data();
+    } else {
+      // Fallback profile creation if absent
+      profile = {
+        uid: user.uid,
+        fullName: user.displayName || email.split("@")[0],
+        email: user.email,
+        phone: "",
+        role: email.toLowerCase() === "jihadhossan10000@gmail.com" ? "admin" : "customer",
+        createdAt: new Date().toISOString()
+      };
+      await setDoc(doc(db, "users", user.uid), profile);
+    }
+
+    currentUserProfile = profile;
+    showToast(`Welcome back, ${profile.fullName}!`);
+    return profile;
+  } catch (error) {
+    showToast(error.message || "Login failed. Check credentials.", "error");
+    throw error;
+  }
 }
 
-// --- Listen to Auth Changes ---
-export function initAuthListener(onUserChanged) {
+// Reset Password
+export async function sendPasswordReset(email) {
+  if (!auth) return;
+  try {
+    await sendPasswordResetEmail(auth, email);
+    showToast("Password reset link sent to your email.");
+  } catch (error) {
+    showToast(error.message || "Failed to send reset link", "error");
+  }
+}
+
+// Logout
+export async function logoutUser() {
+  if (!auth) return;
+  try {
+    await signOut(auth);
+    currentUser = null;
+    currentUserProfile = null;
+    showToast("Logged out successfully");
+    window.location.reload();
+  } catch (error) {
+    showToast("Logout failed", "error");
+  }
+}
+
+// Subscribe to Auth State Changes
+export function initAuthObserver(onProfileLoaded) {
+  if (!auth) {
+    if (onProfileLoaded) onProfileLoaded(null);
+    return;
+  }
+
   onAuthStateChanged(auth, async (user) => {
+    currentUser = user;
     if (user) {
       try {
-        const userDocRef = doc(db, 'users', user.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        
-        if (userDocSnap.exists()) {
-          currentUserData = { uid: user.uid, ...userDocSnap.data() };
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (userDoc.exists()) {
+          currentUserProfile = userDoc.data();
         } else {
-          // Create new user profile document
-          const newUserData = {
+          currentUserProfile = {
             uid: user.uid,
-            name: user.displayName || user.email?.split('@')[0] || 'গ্রাহক',
-            email: user.email || '',
-            phone: user.phoneNumber || '',
-            role: 'customer',
-            photoURL: user.photoURL || '',
-            createdAt: new Date().toISOString()
+            email: user.email,
+            role: "customer"
           };
-          await setDoc(userDocRef, newUserData);
-          currentUserData = newUserData;
         }
-      } catch (e) {
-        console.warn("Auth doc fetch info:", e);
-        currentUserData = {
-          uid: user.uid,
-          name: user.displayName || user.email?.split('@')[0] || 'গ্রাহক',
-          email: user.email || '',
-          role: 'customer'
-        };
+      } catch (err) {
+        console.error("Error fetching profile:", err);
       }
     } else {
-      currentUserData = null;
+      currentUserProfile = null;
     }
-    
-    if (typeof onUserChanged === 'function') {
-      onUserChanged(currentUserData);
+
+    if (onProfileLoaded) {
+      onProfileLoaded(currentUserProfile);
     }
   });
 }
 
-// --- Register with Email & Password ---
-export async function registerUser(email, password, name, phone = '') {
+// Update Personal Address & Information
+export async function updateUserAddress(addressData) {
+  if (!currentUser || !db) return;
   try {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
+    await updateDoc(doc(db, "users", currentUser.uid), {
+      fullName: addressData.fullName || "",
+      phone: addressData.phone || "",
+      division: addressData.division || "",
+      district: addressData.district || "",
+      upazila: addressData.upazila || "",
+      area: addressData.area || "",
+      address: addressData.address || ""
+    });
     
-    await updateProfile(user, { displayName: name });
-    
-    const userDocData = {
-      uid: user.uid,
-      name: name,
-      email: email,
-      phone: phone,
-      role: 'customer',
-      createdAt: new Date().toISOString()
-    };
-    
-    await setDoc(doc(db, 'users', user.uid), userDocData);
-    currentUserData = userDocData;
-    showToast('সফলভাবে রেজিস্ট্রেশন সম্পন্ন হয়েছে!', 'success');
-    return userDocData;
-  } catch (error) {
-    showToast(error.message || 'রেজিস্ট্রেশন ব্যর্থ হয়েছে', 'error');
-    throw error;
-  }
-}
-
-// --- Login with Email & Password ---
-export async function loginUser(email, password) {
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    showToast('সফলভাবে লগইন হয়েছে!', 'success');
-    return userCredential.user;
-  } catch (error) {
-    showToast('ইমেইল অথবা পাসওয়ার্ড সঠিক নয়', 'error');
-    throw error;
-  }
-}
-
-// --- Login with Google ---
-export async function loginWithGoogle() {
-  try {
-    const provider = new GoogleAuthProvider();
-    const result = await signInWithPopup(auth, provider);
-    showToast('গুগল লগইন সফল হয়েছে!', 'success');
-    return result.user;
-  } catch (error) {
-    showToast('গুগল লগইন ব্যর্থ হয়েছে', 'error');
-    throw error;
-  }
-}
-
-// --- Forgot Password ---
-export async function resetPassword(email) {
-  try {
-    await sendPasswordResetEmail(auth, email);
-    showToast('পাসওয়ার্ড রিসেট লিংক ইমেইলে পাঠানো হয়েছে', 'success');
-  } catch (error) {
-    showToast('পাসওয়ার্ড রিসেট লিংক পাঠাতে ব্যর্থ হয়েছে', 'error');
-  }
-}
-
-// --- Logout ---
-export async function logoutUser() {
-  try {
-    await signOut(auth);
-    currentUserData = null;
-    showToast('লগআউট করা হয়েছে', 'info');
-  } catch (error) {
-    showToast('লগআউট ব্যর্থ হয়েছে', 'error');
+    currentUserProfile = { ...currentUserProfile, ...addressData };
+    showToast("Profile address updated!");
+  } catch (err) {
+    showToast("Failed to update profile", "error");
   }
 }

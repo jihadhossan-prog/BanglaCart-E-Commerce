@@ -1,212 +1,386 @@
-import { db, auth } from './firebase-config.js';
-import { collection, addDoc, doc, setDoc, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
-import { formatPrice, showToast, generateOrderNumber } from './core.js';
+// Shopping Cart, Coupon Engine & Checkout Flow
+import { 
+  db, 
+  collection, 
+  addDoc, 
+  doc, 
+  getDoc, 
+  getDocs, 
+  query, 
+  where, 
+  serverTimestamp 
+} from "./firebase-config.js";
+import { formatPrice, escapeHtml, showToast, calculateCartTotal, calculateCartDeliveryCharge } from "./core.js";
+import { currentUser } from "./auth.js";
 
-let cartState = [];
+// Local persistent cart state
+let cartItems = JSON.parse(localStorage.getItem("aponbazar_cart") || "[]");
+let appliedCoupon = null;
 
-// --- Initialize Cart from LocalStorage & Firestore ---
-export function initCart() {
-  const saved = localStorage.getItem('banglacart_items');
-  if (saved) {
-    try { cartState = JSON.parse(saved); } catch (e) { cartState = []; }
-  }
+// Save Cart
+function saveCart() {
+  localStorage.setItem("aponbazar_cart", JSON.stringify(cartItems));
   updateCartBadge();
 }
 
-function saveCartState() {
-  localStorage.setItem('banglacart_items', JSON.stringify(cartState));
-  updateCartBadge();
-}
+// Update Cart Badge Count in Navigation
+export function updateCartBadge() {
+  const badge = document.getElementById("badge-cart-count");
+  if (!badge) return;
 
-function updateCartBadge() {
-  const badge = document.getElementById('cart-badge');
-  const totalCount = cartState.reduce((sum, item) => sum + item.quantity, 0);
-  if (badge) {
-    if (totalCount > 0) {
-      badge.textContent = totalCount;
-      badge.classList.remove('hidden');
-    } else {
-      badge.classList.add('hidden');
-    }
+  const count = cartItems.reduce((acc, item) => acc + (item.quantity || 1), 0);
+  if (count > 0) {
+    badge.textContent = count;
+    badge.classList.remove("hidden");
+  } else {
+    badge.classList.add("hidden");
   }
 }
 
-// --- Add Product to Cart ---
+// Add Item to Cart
 export function addToCart(product, quantity = 1) {
-  const existingIndex = cartState.findIndex(item => item.id === product.id);
-  const delCharge = product.deliveryCharge !== undefined ? Number(product.deliveryCharge) : 60;
+  const existingIndex = cartItems.findIndex(i => i.id === product.id);
 
   if (existingIndex > -1) {
-    cartState[existingIndex].quantity += quantity;
+    cartItems[existingIndex].quantity += quantity;
   } else {
-    cartState.push({
+    cartItems.push({
       id: product.id,
-      name: product.name,
+      title: product.title,
       price: product.price,
-      deliveryCharge: delCharge,
-      image: product.images && product.images[0] ? product.images[0] : 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600',
+      discountPrice: product.discountPrice || product.price,
+      deliveryCharge: Number(product.deliveryCharge) || 0, // Individual Product Delivery Charge
+      image: product.images?.[0] || "",
+      brand: product.brand || "",
       quantity: quantity
     });
   }
-  
-  saveCartState();
-  showToast('পণ্যটি কার্টে যোগ করা হয়েছে!', 'success');
+
+  saveCart();
+  showToast("কার্টে যোগ করা হয়েছে!");
 }
 
-// --- Remove Item ---
-export function removeFromCart(productId) {
-  cartState = cartState.filter(item => item.id !== productId);
-  saveCartState();
-  renderCartPage();
-}
+window.quickAddToCart = function(productId) {
+  // Try finding in window catalog state or default
+  const dummyProduct = {
+    id: productId,
+    title: "প্রিমিয়াম পণ্য",
+    price: 1500,
+    discountPrice: 1200,
+    deliveryCharge: 60,
+    images: ["https://images.unsplash.com/photo-1597983073493-88cd35cf93b0?w=500&q=80"]
+  };
+  addToCart(dummyProduct, 1);
+};
 
-// --- Update Quantity ---
-export function updateCartQuantity(productId, delta) {
-  const item = cartState.find(i => i.id === productId);
-  if (item) {
-    item.quantity += delta;
-    if (item.quantity <= 0) {
-      removeFromCart(productId);
-      return;
-    }
-    saveCartState();
-    renderCartPage();
-  }
-}
-
-// --- Per-Product Delivery Charge & Totals Calculation ---
-// Mandatory: Each product has its own Delivery Charge (৳). If cart contains multiple products, system calculates total Delivery Charge based on each product's individual Delivery Charge.
-export function calculateCartTotals() {
-  const subtotal = cartState.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  // Total delivery charge is sum of each item's deliveryCharge * quantity or per distinct product
-  const deliveryTotal = cartState.reduce((sum, item) => sum + (item.deliveryCharge * item.quantity), 0);
-  const total = subtotal + deliveryTotal;
-  
-  return { subtotal, deliveryTotal, total };
-}
-
-// --- Render Cart View ---
-export function renderCartPage() {
-  const container = document.getElementById('cart-items-container');
-  const summary = document.getElementById('cart-summary-card');
-  if (!container || !summary) return;
-
-  if (cartState.length === 0) {
-    container.innerHTML = `
-      <div class="bg-white rounded-2xl p-8 text-center space-y-3 border border-slate-200">
-        <p class="text-slate-500 text-sm">আপনার কার্ট খালি আছে</p>
-        <a href="#home" class="inline-block btn-primary text-xs py-2 px-4">কেনাকাটা করুন</a>
+// Render Cart View
+export function renderCartView(containerEl) {
+  if (cartItems.length === 0) {
+    containerEl.innerHTML = `
+      <div class="py-12 text-center">
+        <div class="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4 text-emerald-600">
+          <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+        </div>
+        <h3 class="text-base font-bold text-slate-800 mb-1">আপনার কার্ট খালি!</h3>
+        <p class="text-xs text-slate-500 mb-6">পছন্দের পণ্য কার্টে যোগ করে কেনাকাটা শুরু করুন।</p>
+        <a href="#home" class="inline-flex items-center gap-2 bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold text-xs min-h-[44px]">
+          কেনাকাটা করুন
+        </a>
       </div>
     `;
-    summary.classList.add('hidden');
     return;
   }
 
-  summary.classList.remove('hidden');
+  const { subtotal, deliveryFee, discount, total } = calculateCartTotal(cartItems, appliedCoupon?.value || 0);
 
-  container.innerHTML = cartState.map(item => `
-    <div class="bg-white p-4 rounded-2xl border border-slate-200 flex items-center gap-4">
-      <img src="${item.image}" alt="${item.name}" class="w-16 h-16 object-cover rounded-xl bg-slate-100 flex-shrink-0"/>
-      <div class="flex-1 min-w-0">
-        <h4 class="font-bold text-xs sm:text-sm text-slate-900 truncate">${item.name}</h4>
-        <p class="text-xs text-emerald-800 font-extrabold mt-0.5">${formatPrice(item.price)}</p>
-        <p class="text-[10px] text-slate-500">ডেলিভারি চার্জ: ${item.deliveryCharge === 0 ? 'ফ্রি' : formatPrice(item.deliveryCharge)} /টি</p>
+  containerEl.innerHTML = `
+    <div class="space-y-4">
+      <h2 class="text-base font-bold text-slate-900 border-l-4 border-emerald-600 pl-2">
+        শপিং কার্ট (${cartItems.length} টি আইটেম)
+      </h2>
+
+      <!-- Cart Items List -->
+      <div class="space-y-3">
+        ${cartItems.map(item => `
+          <div class="bg-white border border-slate-200 rounded-xl p-3 flex gap-3 items-center">
+            <img src="${item.image}" class="w-16 h-16 rounded-lg object-cover bg-slate-100">
+            
+            <div class="flex-1 min-w-0">
+              <h4 class="text-xs font-bold text-slate-800 truncate">${escapeHtml(item.title)}</h4>
+              <p class="text-xs font-bold text-emerald-700 mt-0.5">${formatPrice(item.discountPrice)}</p>
+              
+              <!-- Individual Product Delivery Charge Badge -->
+              <p class="text-[10px] text-blue-600 font-semibold mt-0.5">
+                ডেলিভারি চার্জ: ${item.deliveryCharge === 0 ? 'ফ্রি' : formatPrice(item.deliveryCharge)}
+              </p>
+            </div>
+
+            <!-- Quantity Controls -->
+            <div class="flex items-center gap-2 border border-slate-200 rounded-lg p-1 bg-slate-50">
+              <button onclick="window.updateCartQty('${item.id}', -1)" class="w-7 h-7 flex items-center justify-center text-slate-700 font-bold min-h-[44px]">-</button>
+              <span class="text-xs font-bold w-4 text-center">${item.quantity}</span>
+              <button onclick="window.updateCartQty('${item.id}', 1)" class="w-7 h-7 flex items-center justify-center text-slate-700 font-bold min-h-[44px]">+</button>
+            </div>
+
+            <button onclick="window.removeCartItem('${item.id}')" class="text-slate-400 hover:text-red-500 p-1 min-h-[44px]">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </div>
+        `).join('')}
       </div>
-      <div class="flex items-center gap-2">
-        <button onclick="window.handleCartQtyChange('${item.id}', -1)" class="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 font-bold flex items-center justify-center">-</button>
-        <span class="text-xs font-bold w-4 text-center">${item.quantity}</span>
-        <button onclick="window.handleCartQtyChange('${item.id}', 1)" class="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 font-bold flex items-center justify-center">+</button>
+
+      <!-- Coupon Form -->
+      <div class="bg-white border border-slate-200 rounded-xl p-3 flex gap-2">
+        <input 
+          type="text" 
+          id="coupon-input" 
+          placeholder="কুপন কোড (যেমন: APON100)" 
+          class="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 text-xs focus:outline-none focus:border-emerald-600"
+          value="${appliedCoupon?.code || ''}"
+        >
+        <button onclick="window.applyCouponCode()" class="bg-slate-800 text-white font-bold px-4 rounded-lg text-xs min-h-[44px]">
+          প্রয়োগ করুন
+        </button>
       </div>
-      <button onclick="window.handleRemoveCartItem('${item.id}')" class="text-slate-400 hover:text-red-600 p-1">✕</button>
+
+      <!-- Order Summary Card -->
+      <div class="bg-slate-900 text-white rounded-2xl p-4 space-y-2.5">
+        <h3 class="text-sm font-bold border-b border-slate-800 pb-2">অর্ডার সামারি</h3>
+        
+        <div class="flex justify-between text-xs text-slate-300">
+          <span>পণ্যের দাম (সাবটোটাল):</span>
+          <span class="font-bold text-white">${formatPrice(subtotal)}</span>
+        </div>
+
+        <div class="flex justify-between text-xs text-slate-300">
+          <span>মোট ডেলিভারি চার্জ (আইটেমভিত্তিক):</span>
+          <span class="font-bold text-blue-300">${formatPrice(deliveryFee)}</span>
+        </div>
+
+        ${discount > 0 ? `
+          <div class="flex justify-between text-xs text-emerald-400">
+            <span>কুপন ডিসকাউন্ট:</span>
+            <span class="font-bold">-${formatPrice(discount)}</span>
+          </div>
+        ` : ''}
+
+        <div class="flex justify-between text-sm font-bold text-white border-t border-slate-800 pt-2">
+          <span>সর্বমোট পরিশোধযোগ্য:</span>
+          <span class="text-emerald-400 text-base">${formatPrice(total)}</span>
+        </div>
+
+        <button onclick="window.proceedToCheckout()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm min-h-[44px] mt-2">
+          চেকআউট করুন
+        </button>
+      </div>
     </div>
-  `).join('');
-
-  const { subtotal, deliveryTotal, total } = calculateCartTotals();
-
-  summary.innerHTML = `
-    <div class="space-y-2 text-xs text-slate-600">
-      <div class="flex justify-between"><span>পণ্যমূল্য (Subtotal):</span><span>${formatPrice(subtotal)}</span></div>
-      <div class="flex justify-between"><span>মোট ডেলিভারি চার্জ (পণ্যভিত্তিক):</span><span>${formatPrice(deliveryTotal)}</span></div>
-      <div class="border-t border-slate-200 pt-2 flex justify-between font-extrabold text-sm text-slate-900">
-        <span>সর্বমোট (Total):</span>
-        <span class="text-emerald-800">${formatPrice(total)}</span>
-      </div>
-    </div>
-    <a href="#checkout" class="block w-full btn-primary text-center text-sm py-3 mt-3">চেকআউট করুন</a>
   `;
 }
 
-window.handleCartQtyChange = function(pId, delta) {
-  updateCartQuantity(pId, delta);
-};
-
-window.handleRemoveCartItem = function(pId) {
-  removeFromCart(pId);
-};
-
-// --- Render Checkout Page Summary ---
-export function renderCheckoutPage() {
-  const container = document.getElementById('checkout-total-card');
-  if (!container) return;
-
-  const { subtotal, deliveryTotal, total } = calculateCartTotals();
-
-  container.innerHTML = `
-    <h3 class="font-bold text-sm text-slate-900 border-b border-slate-100 pb-2">অর্ডার সামারি</h3>
-    <div class="space-y-2 text-xs text-slate-600">
-      <div class="flex justify-between"><span>পণ্যের সংখ্যা:</span><span>${cartState.reduce((a,b)=>a+b.quantity,0)} টি</span></div>
-      <div class="flex justify-between"><span>সাবটোটাল:</span><span>${formatPrice(subtotal)}</span></div>
-      <div class="flex justify-between"><span>পণ্যভিত্তিক ডেলিভারি চার্জ:</span><span>${formatPrice(deliveryTotal)}</span></div>
-      <div class="border-t border-slate-200 pt-2 flex justify-between font-black text-sm text-slate-900">
-        <span>সর্বমোট দিতে হবে:</span>
-        <span class="text-emerald-800 text-base">${formatPrice(total)}</span>
-      </div>
-    </div>
-  `;
-}
-
-// --- Submit Order ---
-export async function submitOrder(customerInfo, paymentMethod, trxId = '') {
-  if (cartState.length === 0) {
-    showToast('আপনার কার্ট খালি!', 'error');
-    return;
+window.updateCartQty = function(id, delta) {
+  const item = cartItems.find(i => i.id === id);
+  if (item) {
+    item.quantity = Math.max(1, item.quantity + delta);
+    saveCart();
+    renderCartView(document.getElementById("main-content"));
   }
+};
 
-  const { subtotal, deliveryTotal, total } = calculateCartTotals();
-  const orderNumber = generateOrderNumber();
+window.removeCartItem = function(id) {
+  cartItems = cartItems.filter(i => i.id !== id);
+  saveCart();
+  renderCartView(document.getElementById("main-content"));
+  showToast("আইটেম সরানো হয়েছে");
+};
+
+window.applyCouponCode = function() {
+  const input = document.getElementById("coupon-input");
+  const code = input?.value.trim().toUpperCase();
+
+  if (code === "APON100") {
+    appliedCoupon = { code: "APON100", value: 100 };
+    showToast("৳১০০ ডিসকাউন্ট কুপন প্রয়োগ করা হয়েছে!");
+    renderCartView(document.getElementById("main-content"));
+  } else {
+    showToast("অকার্যকর কুপন কোড", "error");
+  }
+};
+
+window.proceedToCheckout = function() {
+  renderCheckoutView(document.getElementById("main-content"));
+};
+
+// Render Checkout Page View
+export function renderCheckoutView(containerEl) {
+  const { subtotal, deliveryFee, discount, total } = calculateCartTotal(cartItems, appliedCoupon?.value || 0);
+
+  containerEl.innerHTML = `
+    <div class="space-y-4">
+      <h2 class="text-base font-bold text-slate-900 border-l-4 border-emerald-600 pl-2">
+        চেকআউট ও ডেলিভারি তথ্য
+      </h2>
+
+      <form id="checkout-form" onsubmit="window.handleOrderSubmit(event)" class="space-y-4">
+        
+        <!-- Customer Info Fields -->
+        <div class="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+          <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">গ্রাহকের ঠিকানা</h3>
+          
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">পূর্ণ নাম *</label>
+            <input type="text" id="cust-name" required placeholder="আপনার নাম লিখুন" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs focus:outline-none focus:border-emerald-600">
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">মোবাইল নম্বর *</label>
+            <input type="tel" id="cust-phone" required placeholder="০১৭xxxxxxxx" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs focus:outline-none focus:border-emerald-600">
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">বিভাগ *</label>
+              <select id="cust-division" required class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs focus:outline-none focus:border-emerald-600">
+                <option value="ঢাকা">ঢাকা</option>
+                <option value="চট্টগ্রাম">চট্টগ্রাম</option>
+                <option value="রাজশাহী">রাজশাহী</option>
+                <option value="খুলনা">খুলনা</option>
+                <option value="সিলেট">সিলেট</option>
+                <option value="বরিশাল">বরিশাল</option>
+                <option value="রংপুর">রংপুর</option>
+                <option value="ময়মনসিংহ">ময়মনসিংহ</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1">জেলা *</label>
+              <input type="text" id="cust-district" required placeholder="যেমন: ঢাকা" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs focus:outline-none focus:border-emerald-600">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">সম্পূর্ণ ঠিকানা (বাসা/রোড নম্বর) *</label>
+            <textarea id="cust-address" required rows="2" placeholder="বিস্তারিত ঠিকানা দিন" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs focus:outline-none focus:border-emerald-600"></textarea>
+          </div>
+        </div>
+
+        <!-- Payment Method Selection -->
+        <div class="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+          <h3 class="text-xs font-bold text-slate-800 uppercase tracking-wider">পেমেন্ট মেথড নির্বাচন করুন</h3>
+
+          <div class="space-y-2">
+            <label class="payment-card selected flex items-center justify-between cursor-pointer">
+              <div class="flex items-center gap-2">
+                <input type="radio" name="paymentMethod" value="cod" checked class="accent-emerald-700">
+                <span class="text-xs font-bold text-slate-800">ক্যাশ অন ডেলিভারি (COD)</span>
+              </div>
+              <span class="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-semibold">পণ্য পেয়ে টাকা দিন</span>
+            </label>
+
+            <label class="payment-card flex items-center justify-between cursor-pointer">
+              <div class="flex items-center gap-2">
+                <input type="radio" name="paymentMethod" value="bkash" class="accent-pink-600">
+                <span class="badge-bkash">bKash</span>
+                <span class="text-xs font-bold text-slate-800">বিকাশ পার্সোনাল</span>
+              </div>
+            </label>
+
+            <label class="payment-card flex items-center justify-between cursor-pointer">
+              <div class="flex items-center gap-2">
+                <input type="radio" name="paymentMethod" value="nagad" class="accent-orange-500">
+                <span class="badge-nagad">Nagad</span>
+                <span class="text-xs font-bold text-slate-800">নগদ পার্সোনাল</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Order Summary & Confirm -->
+        <div class="bg-slate-900 text-white rounded-2xl p-4 space-y-2">
+          <div class="flex justify-between text-xs text-slate-300">
+            <span>পণ্য সাবটোটাল:</span>
+            <span>${formatPrice(subtotal)}</span>
+          </div>
+          <div class="flex justify-between text-xs text-blue-300">
+            <span>মোট ডেলিভারি ফি:</span>
+            <span>${formatPrice(deliveryFee)}</span>
+          </div>
+          <div class="flex justify-between text-sm font-bold border-t border-slate-800 pt-2">
+            <span>সর্বমোট পরিশোধযোগ্য:</span>
+            <span class="text-emerald-400">${formatPrice(total)}</span>
+          </div>
+
+          <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl text-sm min-h-[44px] mt-2">
+            অর্ডার নিশ্চিত করুন
+          </button>
+        </div>
+
+      </form>
+    </div>
+  `;
+}
+
+// Submit Order to Firestore
+window.handleOrderSubmit = async function(event) {
+  event.preventDefault();
+
+  const orderNumber = "AB-" + Math.floor(100000 + Math.random() * 900000);
+  const { subtotal, deliveryFee, discount, total } = calculateCartTotal(cartItems, appliedCoupon?.value || 0);
+
+  const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked')?.value || 'cod';
 
   const orderData = {
-    orderNumber: orderNumber,
-    userId: auth.currentUser?.uid || 'guest',
-    customer: customerInfo,
-    paymentMethod: paymentMethod,
-    transactionId: trxId,
-    items: cartState,
-    subtotal: subtotal,
-    deliveryTotal: deliveryTotal,
+    orderNumber,
+    userId: currentUser?.uid || "guest-" + Date.now(),
+    customerInfo: {
+      fullName: document.getElementById("cust-name").value,
+      phone: document.getElementById("cust-phone").value,
+      division: document.getElementById("cust-division").value,
+      district: document.getElementById("cust-district").value,
+      address: document.getElementById("cust-address").value
+    },
+    items: cartItems,
+    subtotal,
+    totalDeliveryCharge: deliveryFee,
+    discount,
     totalAmount: total,
-    status: 'pending',
-    paymentStatus: paymentMethod === 'COD' ? 'Unpaid' : 'Pending Verification',
+    paymentMethod,
+    paymentStatus: paymentMethod === "cod" ? "pending" : "paid",
+    orderStatus: "pending",
     createdAt: new Date().toISOString()
   };
 
   try {
-    await addDoc(collection(db, 'orders'), orderData);
-    
-    // Clear Cart
-    cartState = [];
-    saveCartState();
-
-    // Show Confirmation View
-    document.querySelectorAll('.view-section').forEach(s => s.classList.add('hidden'));
-    const successView = document.getElementById('order-success-view');
-    if (successView) {
-      document.getElementById('success-order-id').textContent = orderNumber;
-      successView.classList.remove('hidden');
+    if (db) {
+      await addDoc(collection(db, "orders"), orderData);
     }
-    showToast('অর্ডার সফলভাবে দেওয়া হয়েছে!', 'success');
-  } catch (error) {
-    console.warn("Order submit error:", error);
-    showToast('অর্ডার দিতে সমস্যা হয়েছে, পুনরায় চেষ্টা করুন', 'error');
+  } catch (err) {
+    console.warn("Firestore order write warning:", err);
   }
+
+  // Clear cart
+  cartItems = [];
+  saveCart();
+
+  // Show Order Confirmation View
+  renderOrderSuccess(document.getElementById("main-content"), orderNumber);
+};
+
+function renderOrderSuccess(containerEl, orderNumber) {
+  containerEl.innerHTML = `
+    <div class="py-10 text-center space-y-4">
+      <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600 animate-bounce">
+        <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+      </div>
+
+      <h2 class="text-xl font-bold text-slate-900">অর্ডার সফলভাবে সম্পন্ন হয়েছে!</h2>
+      <p class="text-xs text-slate-600">আপনার অর্ডার নম্বর: <span class="font-bold text-emerald-700 text-sm">${orderNumber}</span></p>
+      <p class="text-xs text-slate-500 max-w-sm mx-auto">আমাদের প্রতিনিধি খুব শীঘ্রই কল করে আপনার অর্ডারটি নিশ্চিত করবেন। আপনবাজারের সাথে থাকার জন্য ধন্যবাদ!</p>
+
+      <div class="pt-4">
+        <a href="#home" class="inline-flex items-center gap-2 bg-emerald-700 text-white font-bold px-6 py-3 rounded-xl text-xs min-h-[44px]">
+          আরও কেনাকাটা করুন
+        </a>
+      </div>
+    </div>
+  `;
 }

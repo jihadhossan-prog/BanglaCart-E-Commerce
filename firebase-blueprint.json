@@ -1,0 +1,189 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile with role management",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "fullName": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["customer", "admin"] },
+        "avatarUrl": { "type": "string" },
+        "division": { "type": "string" },
+        "district": { "type": "string" },
+        "upazila": { "type": "string" },
+        "area": { "type": "string" },
+        "address": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Product": {
+      "title": "Product Entity",
+      "description": "Product document with per-product delivery charge",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "brand": { "type": "string" },
+        "sku": { "type": "string" },
+        "price": { "type": "number" },
+        "discountPrice": { "type": "number" },
+        "deliveryCharge": { "type": "number" },
+        "stock": { "type": "number" },
+        "rating": { "type": "number" },
+        "images": { "type": "array" },
+        "specifications": { "type": "object" },
+        "badge": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title", "category", "price", "deliveryCharge", "stock"]
+    },
+    "Category": {
+      "title": "Category Entity",
+      "description": "Product categories",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "slug": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "subCategories": { "type": "array" }
+      },
+      "required": ["name", "slug"]
+    },
+    "Order": {
+      "title": "Order Entity",
+      "description": "Customer orders with payment and itemized delivery charge",
+      "type": "object",
+      "properties": {
+        "orderNumber": { "type": "string" },
+        "userId": { "type": "string" },
+        "customerInfo": { "type": "object" },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "totalDeliveryCharge": { "type": "number" },
+        "discount": { "type": "number" },
+        "totalAmount": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["cod", "bkash", "nagad"] },
+        "paymentStatus": { "type": "string", "enum": ["pending", "paid", "failed"] },
+        "orderStatus": { "type": "string", "enum": ["pending", "processing", "shipped", "delivered", "cancelled"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["orderNumber", "userId", "items", "totalAmount", "paymentMethod"]
+    },
+    "Cart": {
+      "title": "Cart Item",
+      "description": "User shopping cart",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "productId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "addedAt": { "type": "string" }
+      },
+      "required": ["userId", "productId", "quantity"]
+    },
+    "Wishlist": {
+      "title": "Wishlist Item",
+      "description": "User saved products",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "productId": { "type": "string" },
+        "addedAt": { "type": "string" }
+      },
+      "required": ["userId", "productId"]
+    },
+    "Review": {
+      "title": "Product Review",
+      "description": "Product review and star rating",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["productId", "userId", "rating", "comment"]
+    },
+    "Coupon": {
+      "title": "Discount Coupon",
+      "description": "Promo codes and discounts",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "discountType": { "type": "string", "enum": ["percentage", "fixed"] },
+        "discountValue": { "type": "number" },
+        "minAmount": { "type": "number" },
+        "expiryDate": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["code", "discountType", "discountValue", "expiryDate"]
+    },
+    "Banner": {
+      "title": "Promotional Banner",
+      "description": "Hero slider and promo banners",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "linkUrl": { "type": "string" },
+        "position": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["title", "imageUrl"]
+    },
+    "Chat": {
+      "title": "Live Chat Session",
+      "description": "Support chat thread between user and admin",
+      "type": "object",
+      "properties": {
+        "chatId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "lastMessage": { "type": "string" },
+        "lastMessageTimestamp": { "type": "string" },
+        "unreadAdmin": { "type": "number" },
+        "unreadUser": { "type": "number" },
+        "isUserOnline": { "type": "boolean" },
+        "isUserTyping": { "type": "boolean" },
+        "isAdminTyping": { "type": "boolean" }
+      },
+      "required": ["userId", "userName"]
+    },
+    "Message": {
+      "title": "Chat Message",
+      "description": "Individual chat message",
+      "type": "object",
+      "properties": {
+        "chatId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderRole": { "type": "string", "enum": ["customer", "admin"] },
+        "text": { "type": "string" },
+        "attachmentUrl": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "isRead": { "type": "boolean" }
+      },
+      "required": ["chatId", "senderId", "senderRole", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "User profiles" },
+    "/products/{productId}": { "schema": "Product", "description": "Products list with per-product delivery charges" },
+    "/categories/{categoryId}": { "schema": "Category", "description": "Product categories" },
+    "/orders/{orderId}": { "schema": "Order", "description": "Order records" },
+    "/cart/{cartId}": { "schema": "Cart", "description": "Cart items" },
+    "/wishlist/{wishlistId}": { "schema": "Wishlist", "description": "Saved items" },
+    "/reviews/{reviewId}": { "schema": "Review", "description": "Product reviews" },
+    "/coupons/{couponId}": { "schema": "Coupon", "description": "Discount coupons" },
+    "/banners/{bannerId}": { "schema": "Banner", "description": "Promotional banners" },
+    "/chats/{chatId}": { "schema": "Chat", "description": "Support chat sessions" },
+    "/chats/{chatId}/messages/{messageId}": { "schema": "Message", "description": "Live chat messages" }
+  }
+}
