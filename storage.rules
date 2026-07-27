@@ -1,48 +1,38 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-
-    function isSignedIn() {
+    function isAuthenticated() {
       return request.auth != null;
     }
-
+    
     function isAdmin() {
-      return isSignedIn() &&
-        (firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == "admin" ||
-         request.auth.token.email == "jihadhossan10000@gmail.com");
+      return isAuthenticated() &&
+        firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == "admin";
     }
 
-    // Public avatars and review attachments
-    match /avatars/{userId}/{fileName} {
-      allow read: if true;
-      allow write: if isSignedIn() && request.auth.uid == userId;
-    }
-
-    // Chat attachments
-    match /chat_attachments/{chatId}/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn();
-    }
-
-    // Admin uploads (products, categories, banners)
-    match /products/{fileName} {
+    match /products/{allPaths=**} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    match /categories/{fileName} {
+    match /categories/{allPaths=**} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    match /banners/{fileName} {
+    match /banners/{allPaths=**} {
       allow read: if true;
       allow write: if isAdmin();
     }
 
-    // Default deny
-    match /{allPaths=**} {
-      allow read, write: if false;
+    match /chat_uploads/{allPaths=**} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /profiles/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAuthenticated();
     }
   }
 }

@@ -1,11 +1,11 @@
-// Admin Dashboard Logic & Role Verification Engine
 import { 
   db, 
   auth, 
+  onAuthStateChanged, 
   collection, 
-  doc, 
-  getDoc, 
   getDocs, 
+  getDoc, 
+  doc, 
   setDoc, 
   addDoc, 
   updateDoc, 
@@ -13,976 +13,921 @@ import {
   query, 
   where, 
   orderBy, 
-  onSnapshot,
-  onAuthStateChanged,
-  signOut 
-} from "./firebase-config.js";
-import { formatPrice, escapeHtml, showToast, formatDate } from "./core.js";
+  onSnapshot 
+} from './firebase-config.js';
+import { formatPrice, showToast, escapeHtml } from './core.js';
+import * as XLSX from 'xlsx';
 
-let adminUser = null;
+let currentAdminUser = null;
+let activeAdminTab = 'dashboard';
 
-// Initialize Admin Verification Guard
-function initAdminGuard() {
-  const guardScreen = document.getElementById("admin-guard-screen");
-  const guardStatus = document.getElementById("guard-status-text");
-  const adminApp = document.getElementById("admin-app");
-
-  if (!auth) {
-    if (guardStatus) guardStatus.textContent = "Firebase configuration required. Please fill credentials in firebase-config.js";
+// Role-Based Access Control Verification
+onAuthStateChanged(auth, async (user) => {
+  const overlay = document.getElementById('admin-auth-check');
+  if (!user) {
+    window.location.href = './index.html';
     return;
   }
 
-  onAuthStateChanged(auth, async (user) => {
-    if (!user) {
-      if (guardStatus) guardStatus.textContent = "লগইন করা আবশ্যক। রিডাইরেক্ট করা হচ্ছে...";
-      setTimeout(() => window.location.href = "./index.html#profile", 1500);
+  try {
+    const userRef = doc(db, 'users', user.uid);
+    const docSnap = await getDoc(userRef);
+
+    if (!docSnap.exists() || docSnap.data().role !== 'admin') {
+      alert('আপনার এডমিন হিসেবে এই পেজে প্রবেশের অনুমতি নেই!');
+      window.location.href = './index.html';
       return;
     }
 
-    try {
-      const userDoc = await getDoc(doc(db, "users", user.uid));
-      const isSuperAdminEmail = user.email.toLowerCase() === "jihadhossan10000@gmail.com";
+    currentAdminUser = user;
+    overlay?.classList.add('hidden');
+    initAdminApp();
+  } catch (err) {
+    console.error('Admin Auth Check Error:', err);
+    window.location.href = './index.html';
+  }
+});
 
-      if ((userDoc.exists() && userDoc.data().role === "admin") || isSuperAdminEmail) {
-        adminUser = user;
-        guardScreen?.classList.add("hidden");
-        adminApp?.classList.remove("hidden");
-        handleAdminRouter();
-      } else {
-        if (guardStatus) guardStatus.textContent = "অনুমতি নেই! আপনি এডমিন নন।";
-        setTimeout(() => window.location.href = "./index.html", 1500);
-      }
-    } catch (err) {
-      console.error("Admin verification failed:", err);
-      if (guardStatus) guardStatus.textContent = "যাচাইকরণ ত্রুটি।";
-    }
+function initAdminApp() {
+  setupAdminNav();
+  renderAdminTab('dashboard');
+
+  document.getElementById('admin-logout-btn')?.addEventListener('click', async () => {
+    await auth.signOut();
+    window.location.href = './index.html';
   });
 }
 
-// Admin Navigation Hash Router
-function handleAdminRouter() {
-  const hash = window.location.hash || "#dashboard";
-  const mainEl = document.getElementById("admin-main-content");
-  const titleEl = document.getElementById("admin-view-title");
-  if (!mainEl) return;
-
-  document.querySelectorAll(".admin-nav-item").forEach(el => el.classList.remove("active"));
-
-  if (hash === "#products") {
-    document.getElementById("admin-nav-products")?.classList.add("active");
-    if (titleEl) titleEl.textContent = "পণ্য ব্যবস্থাপনা (Product Management)";
-    renderProductManagement(mainEl);
-  } else if (hash === "#categories") {
-    document.getElementById("admin-nav-categories")?.classList.add("active");
-    if (titleEl) titleEl.textContent = "ক্যাটাগরি ব্যবস্থাপনা";
-    renderCategoryManagement(mainEl);
-  } else if (hash === "#banners") {
-    document.getElementById("admin-nav-banners")?.classList.add("active");
-    if (titleEl) titleEl.textContent = "ব্যানার স্লাইডার ব্যবস্থাপনা";
-    renderBannerManagement(mainEl);
-  } else if (hash === "#pages") {
-    document.getElementById("admin-nav-pages")?.classList.add("active");
-    if (titleEl) titleEl.textContent = "পেজ ও তথ্য ব্যবস্থাপনা (Help/Contact/About)";
-    renderPagesManagement(mainEl);
-  } else if (hash === "#orders") {
-    document.getElementById("admin-nav-orders")?.classList.add("active");
-    if (titleEl) titleEl.textContent = "অর্ডার মনিটরিং";
-    renderOrderManagement(mainEl);
-  } else if (hash === "#coupons") {
-    document.getElementById("admin-nav-coupons")?.classList.add("active");
-    if (titleEl) titleEl.textContent = "কুপন ও ডিসকাউন্ট";
-    renderCouponManagement(mainEl);
-  } else if (hash === "#chat") {
-    document.getElementById("admin-nav-chat")?.classList.add("active");
-    if (titleEl) titleEl.textContent = "লাইভ চ্যাট ড্যাশবোর্ড";
-    renderAdminChatDashboard(mainEl);
-  } else {
-    document.getElementById("admin-nav-dashboard")?.classList.add("active");
-    if (titleEl) titleEl.textContent = "ড্যাশবোর্ড ওভারভিউ";
-    renderDashboardOverview(mainEl);
-  }
-}
-
-// Render Dashboard Overview
-async function renderDashboardOverview(containerEl) {
-  containerEl.innerHTML = `
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-      <div class="admin-card">
-        <span class="text-xs font-semibold text-slate-500">মোট বিক্রি (Revenue)</span>
-        <h3 class="text-2xl font-bold text-slate-900 mt-1" id="stat-revenue">৳০</h3>
-      </div>
-
-      <div class="admin-card">
-        <span class="text-xs font-semibold text-slate-500">মোট অর্ডার</span>
-        <h3 class="text-2xl font-bold text-slate-900 mt-1" id="stat-orders">০</h3>
-      </div>
-
-      <div class="admin-card">
-        <span class="text-xs font-semibold text-slate-500">মোট পণ্য</span>
-        <h3 class="text-2xl font-bold text-slate-900 mt-1" id="stat-products">০</h3>
-      </div>
-
-      <div class="admin-card">
-        <span class="text-xs font-semibold text-slate-500">স্টক আউট অ্যালার্ট</span>
-        <h3 class="text-2xl font-bold text-amber-600 mt-1" id="stat-lowstock">০</h3>
-      </div>
-    </div>
-
-    <div class="admin-card">
-      <h3 class="text-sm font-bold text-slate-800 mb-4">সাম্প্রতিক অর্ডার সমূহ</h3>
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-xs">
-          <thead>
-            <tr class="border-b border-slate-200 text-slate-400">
-              <th class="pb-2">অর্ডার আইডি</th>
-              <th class="pb-2">গ্রাহক</th>
-              <th class="pb-2">টাকা</th>
-              <th class="pb-2">পেমেন্ট</th>
-              <th class="pb-2">স্ট্যাটাস</th>
-            </tr>
-          </thead>
-          <tbody id="recent-orders-table-body">
-            <tr><td colspan="5" class="py-4 text-center text-slate-400">অর্ডার লোড হচ্ছে...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-
-  // Fetch Stats from Firestore
-  if (!db) return;
-  try {
-    const prodSnap = await getDocs(collection(db, "products"));
-    document.getElementById("stat-products").textContent = prodSnap.size;
-
-    const orderSnap = await getDocs(collection(db, "orders"));
-    document.getElementById("stat-orders").textContent = orderSnap.size;
-
-    let rev = 0;
-    const ordersList = [];
-    orderSnap.forEach(d => {
-      const data = d.data();
-      rev += Number(data.totalAmount || 0);
-      ordersList.push({ id: d.id, ...data });
+function setupAdminNav() {
+  document.querySelectorAll('.admin-sidebar-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab;
+      document.querySelectorAll('.admin-sidebar-item').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderAdminTab(tab);
     });
-
-    document.getElementById("stat-revenue").textContent = formatPrice(rev);
-
-    const tbody = document.getElementById("recent-orders-table-body");
-    if (ordersList.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-slate-400">কোনো অর্ডার পাওয়া যায়নি</td></tr>`;
-    } else {
-      tbody.innerHTML = ordersList.slice(0, 5).map(o => `
-        <tr class="border-b border-slate-100">
-          <td class="py-3 font-bold text-slate-800">${escapeHtml(o.orderNumber || o.id)}</td>
-          <td class="py-3">${escapeHtml(o.customerInfo?.fullName || 'গ্রাহক')}</td>
-          <td class="py-3 font-bold text-emerald-700">${formatPrice(o.totalAmount)}</td>
-          <td class="py-3 uppercase">${escapeHtml(o.paymentMethod || 'cod')}</td>
-          <td class="py-3"><span class="status-badge status-${o.orderStatus || 'pending'}">${escapeHtml(o.orderStatus || 'pending')}</span></td>
-        </tr>
-      `).join('');
-    }
-
-  } catch (err) {
-    console.warn("Stats load warning:", err);
-  }
-}
-
-// Render Product Management View (Mandatory Per-Product Delivery Charge Input)
-async function renderProductManagement(containerEl) {
-  containerEl.innerHTML = `
-    <div class="space-y-4">
-      <div class="flex justify-between items-center">
-        <h3 class="text-sm font-bold text-slate-800">পণ্য তালিকা</h3>
-        <button onclick="window.openAddProductModal()" class="bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 min-h-[44px]">
-          + নতুন পণ্য যোগ করুন
-        </button>
-      </div>
-
-      <div class="admin-card overflow-x-auto">
-        <table class="w-full text-left text-xs">
-          <thead>
-            <tr class="border-b border-slate-200 text-slate-500">
-              <th class="pb-2">ছবি</th>
-              <th class="pb-2">শিরোনাম</th>
-              <th class="pb-2">ক্যাটাগরি</th>
-              <th class="pb-2">মূল্য</th>
-              <th class="pb-2">ডেলিভারি চার্জ</th>
-              <th class="pb-2">স্টক</th>
-              <th class="pb-2 text-right">অ্যাকশন</th>
-            </tr>
-          </thead>
-          <tbody id="admin-products-table-body">
-            <tr><td colspan="7" class="py-4 text-center text-slate-400">লোড হচ্ছে...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Product Add/Edit Modal -->
-    <div id="product-modal-container"></div>
-  `;
-
-  loadProductsTable();
-}
-
-async function loadProductsTable() {
-  const tbody = document.getElementById("admin-products-table-body");
-  if (!tbody || !db) return;
-
-  try {
-    const snap = await getDocs(collection(db, "products"));
-    if (snap.empty) {
-      tbody.innerHTML = `<tr><td colspan="7" class="py-4 text-center text-slate-400">কোনো পণ্য পাওয়া যায়নি</td></tr>`;
-      return;
-    }
-
-    tbody.innerHTML = snap.docs.map(docSnap => {
-      const p = { id: docSnap.id, ...docSnap.data() };
-      return `
-        <tr class="border-b border-slate-100">
-          <td class="py-2"><img src="${p.images?.[0] || ''}" class="w-10 h-10 rounded object-cover bg-slate-100"></td>
-          <td class="py-2 font-semibold text-slate-800 max-w-xs truncate">${escapeHtml(p.title)}</td>
-          <td class="py-2">${escapeHtml(p.category)}</td>
-          <td class="py-2 font-bold text-emerald-700">${formatPrice(p.discountPrice || p.price)}</td>
-          <td class="py-2 font-bold text-blue-600">${formatPrice(p.deliveryCharge)}</td>
-          <td class="py-2 font-bold">${p.stock || 0}</td>
-          <td class="py-2 text-right space-x-2">
-            <button onclick="window.deleteProduct('${p.id}')" class="text-red-600 hover:underline min-h-[44px]">মুছুন</button>
-          </td>
-        </tr>
-      `;
-    }).join('');
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="7" class="py-4 text-center text-red-500">পণ্য লোড হতে সমস্যা হয়েছে</td></tr>`;
-  }
-}
-
-// Modal for Adding New Product with mandatory Per-Product Delivery Charge Field
-window.openAddProductModal = async function() {
-  const mount = document.getElementById("product-modal-container");
-  if (!mount) return;
-
-  let categoryOptionsHtml = `<option value="">ক্যাটাগরি নির্বাচন করুন</option>`;
-  if (db) {
-    try {
-      const catSnap = await getDocs(query(collection(db, "categories"), orderBy("createdAt", "desc")));
-      if (!catSnap.empty) {
-        categoryOptionsHtml += catSnap.docs.map(docSnap => {
-          const c = docSnap.data();
-          return `<option value="${escapeHtml(c.slug || docSnap.id)}">${escapeHtml(c.name)}</option>`;
-        }).join('');
-      } else {
-        categoryOptionsHtml += `
-          <option value="panjabi">পাঞ্জাবি ও উৎসব</option>
-          <option value="electronics">ইলেকট্রনিক্স</option>
-          <option value="groceries">খাঁটি খাবার ও মুদি</option>
-          <option value="fashion">ফ্যাশন ও লেদার</option>
-        `;
-      }
-    } catch (err) {
-      console.warn("Category fetch warning in product modal:", err);
-      categoryOptionsHtml += `
-        <option value="panjabi">পাঞ্জাবি ও উৎসব</option>
-        <option value="electronics">ইলেকট্রনিক্স</option>
-        <option value="groceries">খাঁটি খাবার ও মুদি</option>
-        <option value="fashion">ফ্যাশন ও লেদার</option>
-      `;
-    }
-  }
-
-  mount.innerHTML = `
-    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-white rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto space-y-4">
-        
-        <div class="flex justify-between items-center border-b pb-2">
-          <h3 class="font-bold text-sm text-slate-900">নতুন পণ্য যোগ করুন</h3>
-          <button onclick="document.getElementById('product-modal-container').innerHTML=''" class="text-slate-400 min-h-[44px]">✕</button>
-        </div>
-
-        <form onsubmit="window.saveProductSubmit(event)" class="space-y-3">
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">পণ্যের নাম *</label>
-            <input type="text" id="p-title" required placeholder="পণ্যের নাম দিন" class="w-full bg-slate-50 border rounded-lg p-2 text-xs">
-          </div>
-
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">ক্যাটাগরি *</label>
-              <select id="p-category" required class="w-full bg-slate-50 border rounded-lg p-2 text-xs">
-                ${categoryOptionsHtml}
-              </select>
-            </div>
-
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">ব্র্যান্ড</label>
-              <input type="text" id="p-brand" placeholder="যেমন: আপন ফ্যাশন" class="w-full bg-slate-50 border rounded-lg p-2 text-xs">
-            </div>
-          </div>
-
-          <div class="grid grid-cols-3 gap-2">
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">মূল্য (৳) *</label>
-              <input type="number" id="p-price" required placeholder="1500" class="w-full bg-slate-50 border rounded-lg p-2 text-xs">
-            </div>
-
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">ডিসকাউন্ট মূল্য (৳)</label>
-              <input type="number" id="p-discount" placeholder="1200" class="w-full bg-slate-50 border rounded-lg p-2 text-xs">
-            </div>
-
-            <!-- MANDATORY PER-PRODUCT DELIVERY CHARGE INPUT FIELD -->
-            <div>
-              <label class="block text-xs font-bold text-blue-800 mb-1">ডেলিভারি চার্জ (৳) *</label>
-              <input type="number" id="p-delivery-charge" required placeholder="60" value="60" class="w-full bg-blue-50 border border-blue-200 rounded-lg p-2 text-xs font-bold text-blue-900">
-            </div>
-          </div>
-
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">স্টক পরিমাণ *</label>
-              <input type="number" id="p-stock" required placeholder="20" value="10" class="w-full bg-slate-50 border rounded-lg p-2 text-xs">
-            </div>
-
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">ছবি URL *</label>
-              <input type="url" id="p-image" required placeholder="https://..." class="w-full bg-slate-50 border rounded-lg p-2 text-xs">
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">বিস্তারিত বিবরণ</label>
-            <textarea id="p-desc" rows="3" placeholder="পণ্যের গুণাগুণ বর্ণনা করুন..." class="w-full bg-slate-50 border rounded-lg p-2 text-xs"></textarea>
-          </div>
-
-          <button type="submit" class="w-full bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs min-h-[44px]">
-            পণ্য সংরক্ষণ করুন
-          </button>
-        </form>
-
-      </div>
-    </div>
-  `;
-};
-
-window.saveProductSubmit = async function(event) {
-  event.preventDefault();
-  if (!db) return;
-
-  const productData = {
-    title: document.getElementById("p-title").value,
-    category: document.getElementById("p-category").value,
-    brand: document.getElementById("p-brand").value || "আপন",
-    price: Number(document.getElementById("p-price").value),
-    discountPrice: Number(document.getElementById("p-discount").value) || Number(document.getElementById("p-price").value),
-    deliveryCharge: Number(document.getElementById("p-delivery-charge").value) || 0, // Individual Product Delivery Charge
-    stock: Number(document.getElementById("p-stock").value) || 0,
-    images: [document.getElementById("p-image").value],
-    description: document.getElementById("p-desc").value || "",
-    rating: 4.8,
-    createdAt: new Date().toISOString()
-  };
-
-  try {
-    await addDoc(collection(db, "products"), productData);
-    showToast("পণ্য সফলভাবে যোগ করা হয়েছে!");
-    document.getElementById('product-modal-container').innerHTML = "";
-    loadProductsTable();
-  } catch (err) {
-    showToast("পণ্য সংরক্ষণ ব্যর্থ হয়েছে", "error");
-  }
-};
-
-window.deleteProduct = async function(id) {
-  if (!confirm("আপনি কি নিশ্চিত এই পণ্যটি মুছে ফেলতে চান?")) return;
-  if (!db) return;
-
-  try {
-    await deleteDoc(doc(db, "products", id));
-    showToast("পণ্যটি মুছে ফেলা হয়েছে");
-    loadProductsTable();
-  } catch (err) {
-    showToast("পণ্য মোছা সম্ভব হয়নি", "error");
-  }
-};
-
-// Admin Live Chat Dashboard
-function renderAdminChatDashboard(containerEl) {
-  containerEl.innerHTML = `
-    <div class="admin-card space-y-4">
-      <h3 class="text-sm font-bold text-slate-800">লাইভ কাস্টমার চ্যাট থ্রেড</h3>
-      <div id="admin-chat-threads-list" class="space-y-2">
-        <p class="text-xs text-slate-400">চ্যাট লোড হচ্ছে...</p>
-      </div>
-    </div>
-  `;
-
-  if (!db) return;
-
-  onSnapshot(collection(db, "chats"), (snapshot) => {
-    const listEl = document.getElementById("admin-chat-threads-list");
-    if (!listEl) return;
-
-    if (snapshot.empty) {
-      listEl.innerHTML = `<p class="text-xs text-slate-400">কোনো একটিভ চ্যাট থ্রেড নেই</p>`;
-      return;
-    }
-
-    listEl.innerHTML = snapshot.docs.map(docSnap => {
-      const c = docSnap.data();
-      return `
-        <div class="p-3 bg-slate-50 border rounded-xl flex justify-between items-center">
-          <div>
-            <h4 class="text-xs font-bold text-slate-800">${escapeHtml(c.userName || 'গ্রাহক')}</h4>
-            <p class="text-[11px] text-slate-500">${escapeHtml(c.lastMessage || '')}</p>
-          </div>
-          <span class="text-[10px] text-slate-400">${formatDate(c.lastMessageTimestamp)}</span>
-        </div>
-      `;
-    }).join('');
   });
 }
 
-// Category Management
-async function renderCategoryManagement(containerEl) {
-  containerEl.innerHTML = `
+// Router for Admin Tabs
+async function renderAdminTab(tab) {
+  activeAdminTab = tab;
+  const main = document.getElementById('admin-main-content');
+  if (!main) return;
+
+  main.innerHTML = `<div class="p-8 text-center text-slate-400 text-sm">ডেটা লোড হচ্ছে...</div>`;
+
+  if (tab === 'dashboard') {
+    await renderDashboardTab(main);
+  } else if (tab === 'products') {
+    await renderProductsTab(main);
+  } else if (tab === 'categories') {
+    await renderCategoriesTab(main);
+  } else if (tab === 'banners') {
+    await renderBannersTab(main);
+  } else if (tab === 'orders') {
+    await renderOrdersTab(main);
+  } else if (tab === 'customers') {
+    await renderCustomersTab(main);
+  } else if (tab === 'coupons') {
+    await renderCouponsTab(main);
+  } else if (tab === 'inventory') {
+    await renderInventoryTab(main);
+  } else if (tab === 'chat') {
+    renderAdminChatTab(main);
+  } else if (tab === 'notifications') {
+    renderNotificationsTab(main);
+  }
+}
+
+// 1. Dashboard Module
+async function renderDashboardTab(container) {
+  try {
+    const [ordersSnap, productsSnap, usersSnap] = await Promise.all([
+      getDocs(collection(db, 'orders')),
+      getDocs(collection(db, 'products')),
+      getDocs(collection(db, 'users'))
+    ]);
+
+    let totalRevenue = 0;
+    let orderCount = ordersSnap.size;
+    let productCount = productsSnap.size;
+    let userCount = usersSnap.size;
+    let lowStockCount = 0;
+    let outOfStockCount = 0;
+
+    ordersSnap.forEach(d => {
+      const o = d.data();
+      if (o.paymentStatus === 'Paid' || o.orderStatus === 'Delivered') {
+        totalRevenue += Number(o.grandTotal) || 0;
+      }
+    });
+
+    productsSnap.forEach(d => {
+      const p = d.data();
+      const st = Number(p.stock) || 0;
+      if (st === 0) outOfStockCount++;
+      else if (st <= 5) lowStockCount++;
+    });
+
+    container.innerHTML = `
+      <div class="space-y-6">
+        <h2 class="text-xl font-bold text-slate-800">ওভারভিউ ড্যাশবোর্ড</h2>
+
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="stat-card">
+            <div>
+              <p class="text-xs text-slate-500 font-medium">মোট রাজস্ব (রেভিনিউ)</p>
+              <h3 class="text-xl font-extrabold text-teal-700 mt-1">${formatPrice(totalRevenue)}</h3>
+            </div>
+            <div class="stat-icon bg-teal-50 text-teal-600">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div>
+              <p class="text-xs text-slate-500 font-medium">মোট অর্ডার</p>
+              <h3 class="text-xl font-extrabold text-slate-800 mt-1">${orderCount}</h3>
+            </div>
+            <div class="stat-icon bg-blue-50 text-blue-600">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div>
+              <p class="text-xs text-slate-500 font-medium">নিবন্ধিত কাস্টমার</p>
+              <h3 class="text-xl font-extrabold text-slate-800 mt-1">${userCount}</h3>
+            </div>
+            <div class="stat-icon bg-purple-50 text-purple-600">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div>
+              <p class="text-xs text-slate-500 font-medium">স্টক সতর্কবার্তা</p>
+              <h3 class="text-xl font-extrabold text-amber-600 mt-1">${lowStockCount} কম / ${outOfStockCount} শেষ</h3>
+            </div>
+            <div class="stat-icon bg-amber-50 text-amber-600">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    console.error('Dashboard load error:', err);
+  }
+}
+
+// 2. Product Management Module (With Mandatory Per-Product Delivery Charge & Excel Import/Export)
+async function renderProductsTab(container) {
+  const [productsSnap, categoriesSnap] = await Promise.all([
+    getDocs(collection(db, 'products')),
+    getDocs(collection(db, 'categories'))
+  ]);
+
+  const products = [];
+  productsSnap.forEach(d => products.push({ id: d.id, ...d.data() }));
+
+  const categories = [];
+  categoriesSnap.forEach(d => categories.push(d.data().name));
+
+  container.innerHTML = `
     <div class="space-y-4">
-      <div class="flex justify-between items-center">
-        <h3 class="text-sm font-bold text-slate-800">ক্যাটাগরি তালিকা</h3>
-        <button onclick="window.openAddCategoryModal()" class="bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 min-h-[44px]">
-          + নতুন ক্যাটাগরি যোগ করুন
-        </button>
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <h2 class="text-xl font-bold text-slate-800">প্রোডাক্ট ম্যানেজমেন্ট (${products.length})</h2>
+        <div class="flex items-center gap-2">
+          <button id="excel-export-btn" class="px-3 py-2 bg-emerald-600 text-white font-semibold text-xs rounded-lg hover:bg-emerald-700">Excel Export</button>
+          <button id="open-add-product-btn" class="px-3 py-2 bg-teal-700 text-white font-semibold text-xs rounded-lg hover:bg-teal-800">+ নতুন প্রোডাক্ট</button>
+        </div>
       </div>
 
-      <div class="admin-card overflow-x-auto">
-        <table class="w-full text-left text-xs">
+      <!-- Product List Table -->
+      <div class="table-responsive">
+        <table class="admin-table">
           <thead>
-            <tr class="border-b border-slate-200 text-slate-500">
-              <th class="pb-2">ছবি</th>
-              <th class="pb-2">ক্যাটাগরি নাম</th>
-              <th class="pb-2">স্ল্যাগ (ID)</th>
-              <th class="pb-2 text-right">অ্যাকশন</th>
+            <tr>
+              <th>ছবি</th>
+              <th>নাম</th>
+              <th>ক্যাটাগরি</th>
+              <th>মূল্য</th>
+              <th>ডেলিভারি চার্জ (৳)</th>
+              <th>স্টক</th>
+              <th>অ্যাকশন</th>
             </tr>
           </thead>
-          <tbody id="admin-categories-table-body">
-            <tr><td colspan="4" class="py-4 text-center text-slate-400">লোড হচ্ছে...</td></tr>
+          <tbody>
+            ${products.map(p => `
+              <tr>
+                <td><img src="${p.image || (p.images ? p.images[0] : '')}" class="w-10 h-10 object-cover rounded-lg bg-slate-100" /></td>
+                <td class="font-semibold">${escapeHtml(p.name)}</td>
+                <td><span class="px-2 py-0.5 bg-slate-100 rounded text-xs">${escapeHtml(p.category || 'সাধারণ')}</span></td>
+                <td><span class="font-bold text-teal-700">${formatPrice(p.price)}</span> ${p.discountPrice ? `<span class="text-xs text-slate-400 line-through">${formatPrice(p.discountPrice)}</span>` : ''}</td>
+                <td class="font-bold text-emerald-700">${formatPrice(p.deliveryCharge || 0)}</td>
+                <td><span class="px-2 py-0.5 rounded font-bold text-xs ${p.stock > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}">${p.stock || 0}</span></td>
+                <td>
+                  <div class="flex gap-1">
+                    <button class="edit-prod-btn px-2 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded text-xs font-semibold" data-id="${p.id}">এডিট</button>
+                    <button class="del-prod-btn px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs font-semibold" data-id="${p.id}">মুছুন</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
           </tbody>
         </table>
       </div>
     </div>
-
-    <div id="category-modal-container"></div>
   `;
 
-  loadCategoriesTable();
-}
+  // Product Add / Edit Modal Trigger
+  container.querySelector('#open-add-product-btn')?.addEventListener('click', () => {
+    showProductFormModal(null, categories);
+  });
 
-async function loadCategoriesTable() {
-  const tbody = document.getElementById("admin-categories-table-body");
-  if (!tbody || !db) return;
-
-  try {
-    const snap = await getDocs(query(collection(db, "categories"), orderBy("createdAt", "desc")));
-    if (snap.empty) {
-      tbody.innerHTML = `<tr><td colspan="4" class="py-4 text-center text-slate-400">কোনো ক্যাটাগরি যোগ করা হয়নি</td></tr>`;
-      return;
-    }
-
-    tbody.innerHTML = snap.docs.map(docSnap => {
-      const c = { id: docSnap.id, ...docSnap.data() };
-      return `
-        <tr class="border-b border-slate-100">
-          <td class="py-2"><img src="${c.imageUrl || ''}" class="w-10 h-10 rounded object-cover bg-slate-100"></td>
-          <td class="py-2 font-bold text-slate-800">${escapeHtml(c.name)}</td>
-          <td class="py-2 text-slate-500">${escapeHtml(c.slug || c.id)}</td>
-          <td class="py-2 text-right">
-            <button onclick="window.deleteCategory('${c.id}')" class="text-red-600 hover:underline min-h-[44px]">মুছুন</button>
-          </td>
-        </tr>
-      `;
-    }).join('');
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="4" class="py-4 text-center text-red-500">ক্যাটাগরি লোড হতে সমস্যা হয়েছে</td></tr>`;
-  }
-}
-
-window.openAddCategoryModal = function() {
-  const mount = document.getElementById("category-modal-container");
-  if (!mount) return;
-
-  mount.innerHTML = `
-    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-white rounded-2xl p-5 w-full max-w-md space-y-4">
-        <div class="flex justify-between items-center border-b pb-2">
-          <h3 class="font-bold text-sm text-slate-900">নতুন ক্যাটাগরি যোগ করুন</h3>
-          <button onclick="document.getElementById('category-modal-container').innerHTML=''" class="text-slate-400 min-h-[44px]">✕</button>
-        </div>
-
-        <form onsubmit="window.saveCategorySubmit(event)" class="space-y-3">
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">ক্যাটাগরি নাম *</label>
-            <input type="text" id="cat-name" required placeholder="যেমন: পাঞ্জাবি ও উৎসব" class="w-full bg-slate-50 border rounded-lg p-2 text-xs">
-          </div>
-
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">ক্যাটাগরি স্ল্যাগ/ID *</label>
-            <input type="text" id="cat-slug" required placeholder="যেমন: panjabi" class="w-full bg-slate-50 border rounded-lg p-2 text-xs">
-          </div>
-
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">ছবি URL (Image URL) *</label>
-            <input type="url" id="cat-image" required placeholder="https://images.unsplash.com/..." class="w-full bg-slate-50 border rounded-lg p-2 text-xs">
-          </div>
-
-          <button type="submit" class="w-full bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs min-h-[44px]">
-            ক্যাটাগরি সংরক্ষণ করুন
-          </button>
-        </form>
-      </div>
-    </div>
-  `;
-};
-
-window.saveCategorySubmit = async function(event) {
-  event.preventDefault();
-  if (!db) return;
-
-  const name = document.getElementById("cat-name").value.trim();
-  const slug = document.getElementById("cat-slug").value.trim().toLowerCase();
-  const imageUrl = document.getElementById("cat-image").value.trim();
-
-  try {
-    await addDoc(collection(db, "categories"), {
-      name,
-      slug,
-      imageUrl,
-      createdAt: new Date().toISOString()
+  container.querySelectorAll('.edit-prod-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      const p = products.find(x => x.id === b.dataset.id);
+      showProductFormModal(p, categories);
     });
-    showToast("ক্যাটাগরি সফলভাবে যোগ করা হয়েছে!");
-    document.getElementById("category-modal-container").innerHTML = "";
-    loadCategoriesTable();
-  } catch (err) {
-    showToast("ক্যাটাগরি যোগ ব্যর্থ হয়েছে", "error");
-  }
-};
+  });
 
-window.deleteCategory = async function(id) {
-  if (!confirm("আপনি কি নিশ্চিত এই ক্যাটাগরি মুছে ফেলতে চান?")) return;
-  if (!db) return;
-
-  try {
-    await deleteDoc(doc(db, "categories", id));
-    showToast("ক্যাটাগরি মুছে ফেলা হয়েছে");
-    loadCategoriesTable();
-  } catch (err) {
-    showToast("ক্যাটাগরি মোছা সম্ভব হয়নি", "error");
-  }
-};
-
-// Banner Slider Management
-async function renderBannerManagement(containerEl) {
-  containerEl.innerHTML = `
-    <div class="space-y-4">
-      <div class="flex justify-between items-center">
-        <h3 class="text-sm font-bold text-slate-800">স্লাইডার ব্যানার তালিকা</h3>
-        <button onclick="window.openAddBannerModal()" class="bg-emerald-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 min-h-[44px]">
-          + নতুন ব্যানার যোগ করুন
-        </button>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="admin-banners-grid">
-        <div class="col-span-full py-4 text-center text-slate-400 text-xs">লোড হচ্ছে...</div>
-      </div>
-    </div>
-
-    <div id="banner-modal-container"></div>
-  `;
-
-  loadBannersGrid();
-}
-
-async function loadBannersGrid() {
-  const gridEl = document.getElementById("admin-banners-grid");
-  if (!gridEl || !db) return;
-
-  try {
-    const snap = await getDocs(query(collection(db, "banners"), orderBy("createdAt", "desc")));
-    if (snap.empty) {
-      gridEl.innerHTML = `<div class="col-span-full py-8 text-center text-slate-400 text-xs bg-white border rounded-xl">কোনো স্লাইডার ব্যানার যুক্ত করা হয়নি</div>`;
-      return;
-    }
-
-    gridEl.innerHTML = snap.docs.map(docSnap => {
-      const b = { id: docSnap.id, ...docSnap.data() };
-      return `
-        <div class="bg-white border rounded-xl overflow-hidden p-3 space-y-2">
-          <div class="relative aspect-[21/9] bg-slate-100 rounded-lg overflow-hidden">
-            <img src="${b.imageUrl}" class="w-full h-full object-cover">
-          </div>
-          <div class="flex justify-between items-center">
-            <div>
-              <h4 class="text-xs font-bold text-slate-800">${escapeHtml(b.title || 'স্লাইডার ব্যানার')}</h4>
-              <p class="text-[10px] text-slate-400">${escapeHtml(b.link || 'কোনো লিংক নেই')}</p>
-            </div>
-            <button onclick="window.deleteBanner('${b.id}')" class="text-xs text-red-600 font-bold hover:underline min-h-[44px] px-2">
-              মুছুন
-            </button>
-          </div>
-        </div>
-      `;
-    }).join('');
-  } catch (err) {
-    gridEl.innerHTML = `<div class="col-span-full py-4 text-center text-red-500 text-xs">ব্যানার লোড হতে সমস্যা হয়েছে</div>`;
-  }
-}
-
-window.openAddBannerModal = function() {
-  const mount = document.getElementById("banner-modal-container");
-  if (!mount) return;
-
-  mount.innerHTML = `
-    <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-white rounded-2xl p-5 w-full max-w-md space-y-4">
-        <div class="flex justify-between items-center border-b pb-2">
-          <h3 class="font-bold text-sm text-slate-900">নতুন স্লাইডার ব্যানার যোগ করুন</h3>
-          <button onclick="document.getElementById('banner-modal-container').innerHTML=''" class="text-slate-400 min-h-[44px]">✕</button>
-        </div>
-
-        <form onsubmit="window.saveBannerSubmit(event)" class="space-y-3">
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">ব্যানার শিরোনাম/ক্যাপশন (ঐচ্ছিক)</label>
-            <input type="text" id="banner-title" placeholder="যেমন: বিশেষ অফার ৫০% ছাড়" class="w-full bg-slate-50 border rounded-lg p-2 text-xs">
-          </div>
-
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">ব্যানার ছবি URL *</label>
-            <input type="url" id="banner-image" required placeholder="https://images.unsplash.com/..." class="w-full bg-slate-50 border rounded-lg p-2 text-xs">
-          </div>
-
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">টার্গেট লিংক / ক্যাটাগরি (ঐচ্ছিক)</label>
-            <input type="text" id="banner-link" placeholder="#category-panjabi" class="w-full bg-slate-50 border rounded-lg p-2 text-xs">
-          </div>
-
-          <button type="submit" class="w-full bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs min-h-[44px]">
-            ব্যানার সংরক্ষণ করুন
-          </button>
-        </form>
-      </div>
-    </div>
-  `;
-};
-
-window.saveBannerSubmit = async function(event) {
-  event.preventDefault();
-  if (!db) return;
-
-  const title = document.getElementById("banner-title").value.trim();
-  const imageUrl = document.getElementById("banner-image").value.trim();
-  const link = document.getElementById("banner-link").value.trim();
-
-  try {
-    await addDoc(collection(db, "banners"), {
-      title,
-      imageUrl,
-      link,
-      createdAt: new Date().toISOString()
+  container.querySelectorAll('.del-prod-btn').forEach(b => {
+    b.addEventListener('click', async () => {
+      if (confirm('আপনি কি নিশ্চিত যে এই প্রোডাক্টটি মুছে ফেলতে চান?')) {
+        await deleteDoc(doc(db, 'products', b.dataset.id));
+        showToast('প্রোডাক্ট মুছে ফেলা হয়েছে', 'info');
+        renderAdminTab('products');
+      }
     });
-    showToast("স্লাইডার ব্যানার যোগ করা হয়েছে!");
-    document.getElementById("banner-modal-container").innerHTML = "";
-    loadBannersGrid();
-  } catch (err) {
-    showToast("ব্যানার যোগ ব্যর্থ হয়েছে", "error");
-  }
-};
+  });
 
-window.deleteBanner = async function(id) {
-  if (!confirm("আপনি কি নিশ্চিত এই ব্যানার মুছে ফেলতে চান?")) return;
-  if (!db) return;
-
-  try {
-    await deleteDoc(doc(db, "banners", id));
-    showToast("ব্যানার মুছে ফেলা হয়েছে");
-    loadBannersGrid();
-  } catch (err) {
-    showToast("ব্যানার মোছা সম্ভব হয়নি", "error");
-  }
-};
-
-function renderOrderManagement(containerEl) {
-  containerEl.innerHTML = `<div class="admin-card"><h3 class="text-sm font-bold">অর্ডার ড্যাশবোর্ড সক্রিয়</h3></div>`;
+  // Excel Export
+  container.querySelector('#excel-export-btn')?.addEventListener('click', () => {
+    const exportData = products.map(p => ({
+      ID: p.id,
+      Name: p.name,
+      Category: p.category,
+      Price: p.price,
+      DiscountPrice: p.discountPrice || '',
+      DeliveryCharge: p.deliveryCharge || 0,
+      Stock: p.stock || 0,
+      SKU: p.sku || ''
+    }));
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Products");
+    XLSX.writeFile(wb, "BanglaMart_Products.xlsx");
+  });
 }
 
-function renderCouponManagement(containerEl) {
-  containerEl.innerHTML = `<div class="admin-card"><h3 class="text-sm font-bold">কুপন কন্ট্রোল প্যানেল সক্রিয়</h3></div>`;
-}
+// Product Add / Edit Modal Form
+function showProductFormModal(prod, categories) {
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4';
 
-// Pages & Information Management (Help Center, Contact Us, About Us)
-async function renderPagesManagement(containerEl) {
-  containerEl.innerHTML = `
-    <div class="space-y-6 max-w-4xl">
-      <!-- Header Tabs -->
-      <div class="flex gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
-        <button onclick="window.switchPagesTab('about')" id="tab-btn-about" class="px-4 py-2 text-xs font-bold rounded-lg bg-emerald-700 text-white min-h-[44px]">
-          ১. আমাদের সম্পর্কে (About Us)
-        </button>
-        <button onclick="window.switchPagesTab('contact')" id="tab-btn-contact" class="px-4 py-2 text-xs font-bold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 min-h-[44px]">
-          ২. যোগাযোগ তথ্য (Contact Us)
-        </button>
-        <button onclick="window.switchPagesTab('help')" id="tab-btn-help" class="px-4 py-2 text-xs font-bold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 min-h-[44px]">
-          ৩. হেল্প সেন্টার ও এফএকিউ (Help & FAQ)
-        </button>
-      </div>
+  modal.innerHTML = `
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto space-y-4 shadow-2xl relative">
+      <h3 class="font-bold text-slate-800 text-base">${prod ? 'প্রোডাক্ট এডিট করুন' : 'নতুন প্রোডাক্ট যোগ করুন'}</h3>
 
-      <!-- Main Form Container -->
-      <form onsubmit="window.savePagesInfoSubmit(event)" class="space-y-6">
+      <form id="prod-form" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold mb-1">প্রোডাক্টের নাম *</label>
+          <input type="text" id="p-name" required value="${escapeHtml(prod?.name || '')}" class="w-full p-2 border border-slate-300 rounded-lg" />
+        </div>
 
-        <!-- 1. About Us Tab Content -->
-        <div id="pages-tab-about" class="admin-card space-y-4">
-          <h3 class="text-sm font-bold text-slate-800 border-b pb-2">আমাদের সম্পর্কে (About Us) পেজ সম্পাদনা</h3>
-          
+        <div class="grid grid-cols-2 gap-2">
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">পেজ শিরোনাম (Headline)</label>
-            <input type="text" id="page-about-title" placeholder="আপনবাজার — আপনার বিশ্বাসী অনলাইন শপিং প্ল্যাটফর্ম" class="w-full bg-slate-50 border rounded-lg p-2.5 text-xs">
+            <label class="block font-semibold mb-1">মূল্য (৳) *</label>
+            <input type="number" id="p-price" required value="${prod?.price || ''}" class="w-full p-2 border border-slate-300 rounded-lg" />
           </div>
-
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">বিস্তারিত বিবরণ (Full Description)</label>
-            <textarea id="page-about-desc" rows="4" placeholder="আপনবাজার বাংলাদেশের একটি প্রতিশ্রুতিশীল ই-কমার্স শপ..." class="w-full bg-slate-50 border rounded-lg p-2.5 text-xs"></textarea>
-          </div>
-
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">ব্যানার / লোগো ছবি URL</label>
-            <input type="url" id="page-about-image" placeholder="https://images.unsplash.com/..." class="w-full bg-slate-50 border rounded-lg p-2.5 text-xs">
-          </div>
-
-          <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">হাইলাইটস / বৈশিষ্ট্যসমূহ (প্রতিটি লাইনে ১টি)</label>
-            <textarea id="page-about-highlights" rows="3" placeholder="১০০% খাঁটি ও মানসম্মত পণ্য&#10;দ্রুততম ক্যাশ অন ডেলিভারি&#10;সহজ রিটার্ন ও রিফান্ড নীতি" class="w-full bg-slate-50 border rounded-lg p-2.5 text-xs"></textarea>
+            <label class="block font-semibold mb-1">ডিসকাউন্ট মূল্য (৳)</label>
+            <input type="number" id="p-disc" value="${prod?.discountPrice || ''}" class="w-full p-2 border border-slate-300 rounded-lg" />
           </div>
         </div>
 
-        <!-- 2. Contact Us Tab Content -->
-        <div id="pages-tab-contact" class="admin-card space-y-4 hidden">
-          <h3 class="text-sm font-bold text-slate-800 border-b pb-2">যোগাযোগ করুন (Contact Info) তথ্য সম্পাদনা</h3>
+        <!-- Mandatory Per-Product Delivery Charge Field -->
+        <div class="p-3 bg-teal-50/60 border border-teal-200 rounded-xl">
+          <label class="block font-bold text-teal-800 mb-1">পণ্যভিত্তিক ডেলিভারি চার্জ (৳) *</label>
+          <input type="number" id="p-delivery" required value="${prod?.deliveryCharge !== undefined ? prod.deliveryCharge : 60}" class="w-full p-2 border border-slate-300 rounded-lg font-bold text-teal-800 bg-white" placeholder="0 লিখলে ফ্রি ডেলিভারি হবে" />
+          <p class="text-[10px] text-teal-600 mt-1">এই প্রোডাক্টের নিজস্ব ডেলিভারি ফি সেট করুন (০ টাকা লিখলে ফ্রি ডেলিভারি)</p>
+        </div>
 
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">হটলাইন / মোবাইল নম্বর *</label>
-              <input type="tel" id="page-contact-phone" placeholder="+880 1700-000000" class="w-full bg-slate-50 border rounded-lg p-2.5 text-xs">
-            </div>
-
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">সাপোর্ট ইমেইল ঠিকানা *</label>
-              <input type="email" id="page-contact-email" placeholder="support@aponbazar.com" class="w-full bg-slate-50 border rounded-lg p-2.5 text-xs">
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">হোয়াটসঅ্যাপ নম্বর (WhatsApp Number)</label>
-              <input type="tel" id="page-contact-whatsapp" placeholder="+880 1700-000000" class="w-full bg-slate-50 border rounded-lg p-2.5 text-xs">
-            </div>
-
-            <div>
-              <label class="block text-xs font-bold text-slate-700 mb-1">অফিস সেবার সময় (Working Hours)</label>
-              <input type="text" id="page-contact-hours" placeholder="প্রতিদিন সকাল ৯:০০ - রাত ১০:০০" class="w-full bg-slate-50 border rounded-lg p-2.5 text-xs">
-            </div>
-          </div>
-
+        <div class="grid grid-cols-2 gap-2">
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">অফিসের প্রধান ঠিকানা (Office Address)</label>
-            <textarea id="page-contact-address" rows="2" placeholder="ধানমন্ডি ৩২, ঢাকা-১২০৯, বাংলাদেশ" class="w-full bg-slate-50 border rounded-lg p-2.5 text-xs"></textarea>
+            <label class="block font-semibold mb-1">ক্যাটাগরি *</label>
+            <select id="p-cat" required class="w-full p-2 border border-slate-300 rounded-lg">
+              ${categories.map(c => `<option value="${escapeHtml(c)}" ${prod?.category === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold mb-1">স্টক পরিমাণ *</label>
+            <input type="number" id="p-stock" required value="${prod?.stock !== undefined ? prod.stock : 10}" class="w-full p-2 border border-slate-300 rounded-lg" />
           </div>
         </div>
 
-        <!-- 3. Help Center Tab Content -->
-        <div id="pages-tab-help" class="admin-card space-y-4 hidden">
-          <h3 class="text-sm font-bold text-slate-800 border-b pb-2">হেল্প সেন্টার ও এফএকিউ (Help Center & FAQs)</h3>
-
+        <div class="grid grid-cols-2 gap-2">
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">হেল্প সেন্টার সূচনা বার্তা</label>
-            <input type="text" id="page-help-title" placeholder="আমরা কিভাবে আপনাকে সাহায্য করতে পারি?" class="w-full bg-slate-50 border rounded-lg p-2.5 text-xs">
+            <label class="block font-semibold mb-1">ব্র্যান্ড</label>
+            <input type="text" id="p-brand" value="${escapeHtml(prod?.brand || '')}" class="w-full p-2 border border-slate-300 rounded-lg" />
           </div>
-
-          <!-- FAQ Manager List -->
           <div>
-            <div class="flex justify-between items-center mb-2">
-              <label class="block text-xs font-bold text-slate-700">সাধারণ প্রশ্ন ও উত্তর (FAQs)</label>
-              <button type="button" onclick="window.addNewFaqItem()" class="text-xs bg-emerald-100 text-emerald-800 font-bold px-3 py-1 rounded-lg hover:bg-emerald-200 min-h-[44px]">
-                + নতুন প্রশ্ন যোগ করুন
-              </button>
-            </div>
-            
-            <div id="faq-items-list" class="space-y-3">
-              <!-- Dynamically populated FAQ boxes -->
-            </div>
+            <label class="block font-semibold mb-1">SKU কোড</label>
+            <input type="text" id="p-sku" value="${escapeHtml(prod?.sku || '')}" class="w-full p-2 border border-slate-300 rounded-lg" />
           </div>
         </div>
 
-        <!-- Save Button Sticky Bar -->
-        <div class="bg-white p-4 border rounded-xl flex items-center justify-between shadow-sm">
-          <span class="text-xs text-slate-500 font-semibold">সব তথ্যের পরিবর্তন একসাথেই ডাটাবেজে সংরক্ষিত হবে।</span>
-          <button type="submit" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-6 py-2.5 rounded-xl text-xs min-h-[44px]">
-            💾 সমস্ত তথ্য সংরক্ষণ করুন
-          </button>
+        <div>
+          <label class="block font-semibold mb-1">ছবি URL (কমা দিয়ে একাধিক)</label>
+          <input type="text" id="p-imgs" value="${escapeHtml(prod?.image || (prod?.images ? prod.images.join(',') : ''))}" class="w-full p-2 border border-slate-300 rounded-lg" placeholder="https://..." />
         </div>
 
+        <div>
+          <label class="block font-semibold mb-1">বিস্তারিত বিবরণ</label>
+          <textarea id="p-desc" rows="3" class="w-full p-2 border border-slate-300 rounded-lg">${escapeHtml(prod?.description || '')}</textarea>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" id="close-modal-btn" class="px-4 py-2 bg-slate-200 text-slate-700 font-semibold rounded-lg">বাতিল</button>
+          <button type="submit" class="px-4 py-2 bg-teal-700 text-white font-semibold rounded-lg hover:bg-teal-800">সংরক্ষণ করুন</button>
+        </div>
       </form>
     </div>
   `;
 
-  // Load Existing Pages Data from Firestore
-  loadPagesInfoData();
-}
+  document.body.appendChild(modal);
 
-let loadedFaqs = [];
+  modal.querySelector('#close-modal-btn').addEventListener('click', () => modal.remove());
 
-async function loadPagesInfoData() {
-  if (!db) return;
+  modal.querySelector('#prod-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const imgs = modal.querySelector('#p-imgs').value.split(',').map(s => s.trim()).filter(Boolean);
 
-  try {
-    const docSnap = await getDoc(doc(db, "settings", "pages_info"));
-    let data = {};
-    if (docSnap.exists()) {
-      data = docSnap.data();
-    }
+    const payload = {
+      name: modal.querySelector('#p-name').value,
+      price: Number(modal.querySelector('#p-price').value),
+      discountPrice: modal.querySelector('#p-disc').value ? Number(modal.querySelector('#p-disc').value) : null,
+      deliveryCharge: Number(modal.querySelector('#p-delivery').value) || 0,
+      category: modal.querySelector('#p-cat').value,
+      stock: Number(modal.querySelector('#p-stock').value),
+      brand: modal.querySelector('#p-brand').value,
+      sku: modal.querySelector('#p-sku').value,
+      images: imgs,
+      image: imgs[0] || '',
+      description: modal.querySelector('#p-desc').value,
+      updatedAt: new Date().toISOString()
+    };
 
-    // Fill About
-    document.getElementById("page-about-title").value = data.about_title || "আপনবাজার — আপনার বিশ্বাসী অনলাইন শপিং প্ল্যাটফর্ম";
-    document.getElementById("page-about-desc").value = data.about_desc || "আপনবাজার বাংলাদেশের অন্যতম বিশ্বস্ত অনলাইন শপিং গন্তব্য। আমরা সেরা মানের ক্যাটাগরির পোশাক, ইলেকট্রনিক্স, খাঁটি খাবার ও প্রাত্যহিক জীবনের প্রয়োজনীয় পণ্য দ্রুত ডেলিভারি দিয়ে থাকি।";
-    document.getElementById("page-about-image").value = data.about_image || "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=800&q=80";
-    document.getElementById("page-about-highlights").value = data.about_highlights || "১০০% আসল ও খাঁটি পণ্যের নিশ্চয়তা\nসারাদেশে দ্রুততম ক্যাশ অন ডেলিভারি\n২৪/৭ গ্রাহক সেবা ও সরাসরি সাপোর্ট চ্যাট\nসহজ রিটার্ন ও রিফান্ড সুবিধা";
-
-    // Fill Contact
-    document.getElementById("page-contact-phone").value = data.contact_phone || "+880 1700-000000";
-    document.getElementById("page-contact-email").value = data.contact_email || "support@aponbazar.com";
-    document.getElementById("page-contact-whatsapp").value = data.contact_whatsapp || "+880 1700-000000";
-    document.getElementById("page-contact-hours").value = data.contact_hours || "প্রতিদিন সকাল ৯:০০ - রাত ১০:০০";
-    document.getElementById("page-contact-address").value = data.contact_address || "ধানমন্ডি ৩২, ঢাকা-১২০৯, বাংলাদেশ";
-
-    // Fill Help
-    document.getElementById("page-help-title").value = data.help_title || "আমরা কিভাবে আপনাকে সাহায্য করতে পারি?";
-    
-    loadedFaqs = data.faqs || [
-      { q: "কিভাবে অর্ডার করবো?", a: "আপনার পছন্দনীয় পণ্যটি নির্বাচন করে 'অর্ডার করুন' বাটনে ক্লিক করুন। ঠিকানা প্রদান করে ক্যাশ অন ডেলিভারিতে সহজে অর্ডার সম্পন্ন করুন।" },
-      { q: "ডেলিভারি চার্জ কত?", a: "পণ্য অনুযায়ী এবং জেলা ভিত্তিতে ৫০-১২০ টাকা পর্যন্ত ডেলিভারি চার্জ প্রযোজ্য হয়।" },
-      { q: "পণ্য পছন্দ না হলে পরিবর্তন করা যাবে?", a: "জি, পণ্য হাতে পাওয়ার ৩ দিনের মধ্যে কোনো সমস্যা থাকলে সহজে রিটার্ন করতে পারবেন।" }
-    ];
-
-    renderFaqItems();
-  } catch (err) {
-    console.warn("Failed to load pages info:", err);
-  }
-}
-
-function renderFaqItems() {
-  const container = document.getElementById("faq-items-list");
-  if (!container) return;
-
-  if (loadedFaqs.length === 0) {
-    container.innerHTML = `<div class="p-4 text-center text-xs text-slate-400 bg-slate-50 border rounded-lg">কোনো প্রশ্ন যোগ করা হয়নি</div>`;
-    return;
-  }
-
-  container.innerHTML = loadedFaqs.map((faq, index) => `
-    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2 relative">
-      <div class="flex justify-between items-center">
-        <span class="text-xs font-bold text-emerald-800">প্রশ্ন #${index + 1}</span>
-        <button type="button" onclick="window.removeFaqItem(${index})" class="text-xs text-red-600 font-bold hover:underline min-h-[44px] px-2">
-          ✕ মুছুন
-        </button>
-      </div>
-      <input type="text" value="${escapeHtml(faq.q || '')}" onchange="window.updateFaqQ(${index}, this.value)" placeholder="প্রশ্ন লিখুন..." class="w-full bg-white border rounded-lg p-2 text-xs font-bold">
-      <textarea rows="2" onchange="window.updateFaqA(${index}, this.value)" placeholder="উত্তর লিখুন..." class="w-full bg-white border rounded-lg p-2 text-xs">${escapeHtml(faq.a || '')}</textarea>
-    </div>
-  `).join('');
-}
-
-window.addNewFaqItem = function() {
-  loadedFaqs.push({ q: "", a: "" });
-  renderFaqItems();
-};
-
-window.removeFaqItem = function(index) {
-  loadedFaqs.splice(index, 1);
-  renderFaqItems();
-};
-
-window.updateFaqQ = function(index, val) {
-  if (loadedFaqs[index]) loadedFaqs[index].q = val;
-};
-
-window.updateFaqA = function(index, val) {
-  if (loadedFaqs[index]) loadedFaqs[index].a = val;
-};
-
-window.switchPagesTab = function(tabName) {
-  const tabs = ['about', 'contact', 'help'];
-  tabs.forEach(t => {
-    const btn = document.getElementById(`tab-btn-${t}`);
-    const content = document.getElementById(`pages-tab-${t}`);
-    if (t === tabName) {
-      btn?.classList.remove('bg-slate-100', 'text-slate-700');
-      btn?.classList.add('bg-emerald-700', 'text-white');
-      content?.classList.remove('hidden');
+    if (prod) {
+      await updateDoc(doc(db, 'products', prod.id), payload);
+      showToast('প্রোডাক্ট আপডেট সফল হয়েছে', 'success');
     } else {
-      btn?.classList.remove('bg-emerald-700', 'text-white');
-      btn?.classList.add('bg-slate-100', 'text-slate-700');
-      content?.classList.add('hidden');
+      payload.createdAt = new Date().toISOString();
+      await addDoc(collection(db, 'products'), payload);
+      showToast('নতুন প্রোডাক্ট যোগ করা হয়েছে', 'success');
+    }
+
+    modal.remove();
+    renderAdminTab('products');
+  });
+}
+
+// 3. Category Management Module
+async function renderCategoriesTab(container) {
+  const snap = await getDocs(collection(db, 'categories'));
+  const categories = [];
+  snap.forEach(d => categories.push({ id: d.id, ...d.data() }));
+
+  container.innerHTML = `
+    <div class="space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-bold text-slate-800">ক্যাটাগরি ম্যানেজমেন্ট (${categories.length})</h2>
+        <button id="add-cat-btn" class="px-3 py-2 bg-teal-700 text-white font-semibold text-xs rounded-lg">+ নতুন ক্যাটাগরি</button>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+        ${categories.map(c => `
+          <div class="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between">
+            <span class="font-bold text-slate-800 text-sm">${escapeHtml(c.name)}</span>
+            <button class="del-cat-btn px-2 py-1 bg-red-50 text-red-600 rounded text-xs" data-id="${c.id}">মুছুন</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  container.querySelector('#add-cat-btn')?.addEventListener('click', async () => {
+    const name = prompt('নতুন ক্যাটাগরির নাম লিখুন:');
+    if (name) {
+      await addDoc(collection(db, 'categories'), { name: name.trim() });
+      showToast('ক্যাটাগরি যোগ করা হয়েছে', 'success');
+      renderAdminTab('categories');
     }
   });
-};
 
-window.savePagesInfoSubmit = async function(event) {
-  event.preventDefault();
-  if (!db) return;
+  container.querySelectorAll('.del-cat-btn').forEach(b => {
+    b.addEventListener('click', async () => {
+      if (confirm('ক্যাটাগরি মুছে ফেলতে চান?')) {
+        await deleteDoc(doc(db, 'categories', b.dataset.id));
+        showToast('ক্যাটাগরি মোছা হয়েছে', 'info');
+        renderAdminTab('categories');
+      }
+    });
+  });
+}
 
-  const about_title = document.getElementById("page-about-title")?.value.trim();
-  const about_desc = document.getElementById("page-about-desc")?.value.trim();
-  const about_image = document.getElementById("page-about-image")?.value.trim();
-  const about_highlights = document.getElementById("page-about-highlights")?.value.trim();
-
-  const contact_phone = document.getElementById("page-contact-phone")?.value.trim();
-  const contact_email = document.getElementById("page-contact-email")?.value.trim();
-  const contact_whatsapp = document.getElementById("page-contact-whatsapp")?.value.trim();
-  const contact_hours = document.getElementById("page-contact-hours")?.value.trim();
-  const contact_address = document.getElementById("page-contact-address")?.value.trim();
-
-  const help_title = document.getElementById("page-help-title")?.value.trim();
-
-  const payload = {
-    about_title,
-    about_desc,
-    about_image,
-    about_highlights,
-    contact_phone,
-    contact_email,
-    contact_whatsapp,
-    contact_hours,
-    contact_address,
-    help_title,
-    faqs: loadedFaqs.filter(f => f.q.trim().length > 0),
-    updatedAt: new Date().toISOString()
-  };
-
+// 4. Banner Management Module
+async function renderBannersTab(container) {
+  let banners = [];
   try {
-    await setDoc(doc(db, "settings", "pages_info"), payload, { merge: true });
-    showToast("পেজ ও তথ্য সফলভাবে সংরক্ষণ করা হয়েছে!");
+    const snap = await getDocs(query(collection(db, 'banners'), orderBy('createdAt', 'desc')));
+    snap.forEach(d => banners.push({ id: d.id, ...d.data() }));
   } catch (err) {
-    console.error("Save pages info failed:", err);
-    showToast("তথ্য সংরক্ষণে সমস্যা হয়েছে", "error");
+    const snap = await getDocs(collection(db, 'banners'));
+    snap.forEach(d => banners.push({ id: d.id, ...d.data() }));
   }
-};
 
-// Admin Events Init
-window.addEventListener("DOMContentLoaded", () => {
-  initAdminGuard();
+  container.innerHTML = `
+    <div class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800">স্লাইডার ব্যনার ম্যানেজমেন্ট (${banners.length})</h2>
+          <p class="text-xs text-slate-500 mt-0.5">এডমিন প্যানেল থেকে যোগ করা ব্যনারগুলোই কেবল হোমপেজ স্লাইডারে দেখাবে</p>
+        </div>
+        <button id="add-banner-btn" class="px-3 py-2 bg-teal-700 text-white font-semibold text-xs rounded-lg hover:bg-teal-800 transition">+ নতুন ব্যনার</button>
+      </div>
 
-  document.getElementById("btn-admin-logout")?.addEventListener("click", () => {
-    signOut(auth);
-    window.location.href = "./index.html";
+      ${banners.length === 0 ? `
+        <div class="bg-amber-50 border border-amber-200 text-amber-800 p-6 rounded-2xl text-center space-y-2">
+          <svg class="w-10 h-10 mx-auto text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          <h3 class="font-bold text-sm">বর্তমানে কোনো স্লাইডার ব্যনার নেই</h3>
+          <p class="text-xs text-amber-700">হোমপেজে স্লাইডার ব্যনার দেখানোর জন্য উপরের '+ নতুন ব্যনার' বাটনে ক্লিক করে প্রথম ব্যনারটি যোগ করুন।</p>
+        </div>
+      ` : `
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          ${banners.map(b => `
+            <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs flex flex-col">
+              <div class="h-36 bg-slate-100 overflow-hidden relative">
+                <img src="${escapeHtml(b.imageUrl)}" class="w-full h-full object-cover" />
+              </div>
+              <div class="p-3 flex items-center justify-between gap-2 flex-1">
+                <div>
+                  <h4 class="font-bold text-slate-800 text-xs">${escapeHtml(b.title || 'শিরোনাম নেই')}</h4>
+                  <p class="text-[11px] text-slate-500 mt-0.5 line-clamp-1">${escapeHtml(b.subtitle || 'উপ-শিরোনাম নেই')}</p>
+                </div>
+                <div class="flex items-center gap-1">
+                  <button class="edit-banner-btn px-2 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-md text-xs font-semibold" data-id="${b.id}">এডিট</button>
+                  <button class="del-banner-btn px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded-md text-xs font-semibold" data-id="${b.id}">মুছুন</button>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `}
+    </div>
+  `;
+
+  container.querySelector('#add-banner-btn')?.addEventListener('click', () => {
+    showBannerFormModal();
   });
 
-  window.addEventListener("hashchange", handleAdminRouter);
-});
+  container.querySelectorAll('.edit-banner-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      const bannerObj = banners.find(x => x.id === b.dataset.id);
+      showBannerFormModal(bannerObj);
+    });
+  });
+
+  container.querySelectorAll('.del-banner-btn').forEach(b => {
+    b.addEventListener('click', async () => {
+      if (confirm('আপনি কি এই ব্যনারটি মুছে ফেলতে চান?')) {
+        await deleteDoc(doc(db, 'banners', b.dataset.id));
+        showToast('ব্যনার মুছে ফেলা হয়েছে', 'info');
+        renderAdminTab('banners');
+      }
+    });
+  });
+}
+
+function showBannerFormModal(banner = null) {
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4';
+
+  modal.innerHTML = `
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
+      <h3 class="font-bold text-slate-800 text-base">${banner ? 'ব্যনার এডিট করুন' : 'নতুন স্লাইডার ব্যনার যোগ করুন'}</h3>
+
+      <form id="banner-form" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold mb-1">ব্যনার ছবির URL *</label>
+          <input type="text" id="b-url" required value="${escapeHtml(banner?.imageUrl || '')}" class="w-full p-2 border border-slate-300 rounded-lg" placeholder="https://..." />
+        </div>
+
+        <div>
+          <label class="block font-semibold mb-1">শিরোনাম (Title)</label>
+          <input type="text" id="b-title" value="${escapeHtml(banner?.title || '')}" class="w-full p-2 border border-slate-300 rounded-lg" placeholder="যেমন: ঈদ স্পেশাল ডিসকাউন্ট!" />
+        </div>
+
+        <div>
+          <label class="block font-semibold mb-1">উপ-শিরোনাম / অফার বার্তা (Subtitle)</label>
+          <input type="text" id="b-subtitle" value="${escapeHtml(banner?.subtitle || '')}" class="w-full p-2 border border-slate-300 rounded-lg" placeholder="যেমন: সব প্রোডাক্টে ৩০% ছাড়..." />
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" id="close-banner-modal-btn" class="px-4 py-2 bg-slate-200 text-slate-700 font-semibold rounded-lg">বাতিল</button>
+          <button type="submit" class="px-4 py-2 bg-teal-700 text-white font-semibold rounded-lg hover:bg-teal-800">সংরক্ষণ করুন</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  modal.querySelector('#close-banner-modal-btn').addEventListener('click', () => modal.remove());
+
+  modal.querySelector('#banner-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const url = modal.querySelector('#b-url').value.trim();
+    const title = modal.querySelector('#b-title').value.trim();
+    const subtitle = modal.querySelector('#b-subtitle').value.trim();
+
+    if (!url) return;
+
+    const payload = {
+      imageUrl: url,
+      title: title,
+      subtitle: subtitle,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (banner) {
+      await updateDoc(doc(db, 'banners', banner.id), payload);
+      showToast('ব্যনার আপডেট করা হয়েছে', 'success');
+    } else {
+      payload.createdAt = new Date().toISOString();
+      await addDoc(collection(db, 'banners'), payload);
+      showToast('নতুন ব্যনার যোগ করা হয়েছে', 'success');
+    }
+
+    modal.remove();
+    renderAdminTab('banners');
+  });
+}
+
+// 5. Order Management Module
+async function renderOrdersTab(container) {
+  const snap = await getDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc')));
+  const orders = [];
+  snap.forEach(d => orders.push({ id: d.id, ...d.data() }));
+
+  container.innerHTML = `
+    <div class="space-y-4">
+      <h2 class="text-xl font-bold text-slate-800">অর্ডার ম্যানেজমেন্ট (${orders.length})</h2>
+
+      <div class="table-responsive">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>অর্ডার নম্বর</th>
+              <th>গ্রাহক</th>
+              <th>মূল্য</th>
+              <th>পেমেন্ট মেথড</th>
+              <th>পেমেন্ট স্ট্যাটাস</th>
+              <th>ডেলিভারি স্ট্যাটাস</th>
+              <th>অ্যাকশন</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${orders.map(o => `
+              <tr>
+                <td class="font-bold text-teal-700">${escapeHtml(o.orderNumber)}</td>
+                <td>
+                  <div class="font-semibold text-slate-800">${escapeHtml(o.customerInfo?.fullName || 'N/A')}</div>
+                  <div class="text-[10px] text-slate-500">${escapeHtml(o.customerInfo?.phone || '')}</div>
+                </td>
+                <td class="font-bold">${formatPrice(o.grandTotal)}</td>
+                <td class="uppercase font-semibold text-xs">${escapeHtml(o.paymentMethod)} ${o.trxId ? `<span class="text-[10px] text-teal-600 block">Trx: ${escapeHtml(o.trxId)}</span>` : ''}</td>
+                <td>
+                  <select class="pay-status-sel text-xs border border-slate-300 rounded px-1.5 py-1" data-id="${o.id}">
+                    <option value="Unpaid" ${o.paymentStatus === 'Unpaid' ? 'selected' : ''}>Unpaid</option>
+                    <option value="Pending Verification" ${o.paymentStatus === 'Pending Verification' ? 'selected' : ''}>Pending</option>
+                    <option value="Paid" ${o.paymentStatus === 'Paid' ? 'selected' : ''}>Paid</option>
+                  </select>
+                </td>
+                <td>
+                  <select class="del-status-sel text-xs border border-slate-300 rounded px-1.5 py-1" data-id="${o.id}">
+                    <option value="Processing" ${o.orderStatus === 'Processing' ? 'selected' : ''}>Processing</option>
+                    <option value="Shipped" ${o.orderStatus === 'Shipped' ? 'selected' : ''}>Shipped</option>
+                    <option value="Out for Delivery" ${o.orderStatus === 'Out for Delivery' ? 'selected' : ''}>Out for Delivery</option>
+                    <option value="Delivered" ${o.orderStatus === 'Delivered' ? 'selected' : ''}>Delivered</option>
+                    <option value="Cancelled" ${o.orderStatus === 'Cancelled' ? 'selected' : ''}>Cancelled</option>
+                  </select>
+                </td>
+                <td>
+                  <button class="view-order-detail-btn px-2 py-1 bg-teal-50 text-teal-700 rounded text-xs font-bold" data-id="${o.id}">ডিটেইলস</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  container.querySelectorAll('.pay-status-sel').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      await updateDoc(doc(db, 'orders', sel.dataset.id), { paymentStatus: sel.value });
+      showToast('পেমেন্ট স্ট্যাটাস আপডেট করা হয়েছে', 'success');
+    });
+  });
+
+  container.querySelectorAll('.del-status-sel').forEach(sel => {
+    sel.addEventListener('change', async () => {
+      await updateDoc(doc(db, 'orders', sel.dataset.id), { orderStatus: sel.value });
+      showToast('ডেলিভারি স্ট্যাটাস আপডেট করা হয়েছে', 'success');
+    });
+  });
+}
+
+// 6. Customer List Module
+async function renderCustomersTab(container) {
+  const snap = await getDocs(collection(db, 'users'));
+  const customers = [];
+  snap.forEach(d => customers.push({ id: d.id, ...d.data() }));
+
+  container.innerHTML = `
+    <div class="space-y-4">
+      <h2 class="text-xl font-bold text-slate-800">নিবন্ধিত কাস্টমার তালিকা (${customers.length})</h2>
+
+      <div class="table-responsive">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>নাম</th>
+              <th>ইমেইল</th>
+              <th>ফোন</th>
+              <th>রোল</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${customers.map(c => `
+              <tr>
+                <td class="font-semibold text-slate-800">${escapeHtml(c.fullName || 'N/A')}</td>
+                <td>${escapeHtml(c.email || 'N/A')}</td>
+                <td>${escapeHtml(c.phone || 'N/A')}</td>
+                <td><span class="px-2 py-0.5 rounded text-xs font-bold uppercase ${c.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-700'}">${escapeHtml(c.role || 'customer')}</span></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// 7. Coupon Management Module
+async function renderCouponsTab(container) {
+  const snap = await getDocs(collection(db, 'coupons'));
+  const coupons = [];
+  snap.forEach(d => coupons.push({ id: d.id, ...d.data() }));
+
+  container.innerHTML = `
+    <div class="space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-xl font-bold text-slate-800">কুপন ম্যানেজমেন্ট (${coupons.length})</h2>
+        <button id="add-coupon-btn" class="px-3 py-2 bg-teal-700 text-white font-semibold text-xs rounded-lg">+ নতুন কুপন</button>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+        ${coupons.map(cp => `
+          <div class="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between">
+            <div>
+              <span class="font-extrabold text-teal-700 text-sm uppercase">${escapeHtml(cp.code)}</span>
+              <p class="text-xs text-slate-500">ছাড়: ${cp.type === 'percentage' ? `${cp.value}%` : formatPrice(cp.value)}</p>
+            </div>
+            <button class="del-coupon-btn px-2 py-1 bg-red-50 text-red-600 rounded text-xs" data-id="${cp.id}">মুছুন</button>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  container.querySelector('#add-coupon-btn')?.addEventListener('click', async () => {
+    const code = prompt('কুপন কোড (যেমন: SAVE50):');
+    const val = prompt('ছাড়ের পরিমাণ (টাকা বা পার্সেন্ট):');
+    if (code && val) {
+      await addDoc(collection(db, 'coupons'), {
+        code: code.trim().toUpperCase(),
+        value: Number(val),
+        type: 'fixed',
+        createdAt: new Date().toISOString()
+      });
+      showToast('কুপন তৈরি করা হয়েছে', 'success');
+      renderAdminTab('coupons');
+    }
+  });
+
+  container.querySelectorAll('.del-coupon-btn').forEach(b => {
+    b.addEventListener('click', async () => {
+      await deleteDoc(doc(db, 'coupons', b.dataset.id));
+      renderAdminTab('coupons');
+    });
+  });
+}
+
+// 8. Inventory Module
+async function renderInventoryTab(container) {
+  const snap = await getDocs(collection(db, 'products'));
+  const products = [];
+  snap.forEach(d => products.push({ id: d.id, ...d.data() }));
+
+  container.innerHTML = `
+    <div class="space-y-4">
+      <h2 class="text-xl font-bold text-slate-800">স্টক ও ইনভেন্টরি আপডেট</h2>
+
+      <div class="table-responsive">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>প্রোডাক্ট</th>
+              <th>বর্তমান স্টক</th>
+              <th>দ্রুত আপডেট</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${products.map(p => `
+              <tr>
+                <td class="font-semibold">${escapeHtml(p.name)}</td>
+                <td><span class="px-2 py-0.5 rounded font-bold text-xs ${p.stock <= 5 ? 'bg-amber-100 text-amber-800' : 'bg-slate-100'}">${p.stock || 0}</span></td>
+                <td>
+                  <div class="flex items-center gap-2">
+                    <input type="number" class="inv-input w-20 p-1 text-xs border border-slate-300 rounded" value="${p.stock || 0}" data-id="${p.id}" />
+                    <button class="save-inv-btn px-2 py-1 bg-slate-800 text-white text-xs rounded" data-id="${p.id}">সেভ</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  container.querySelectorAll('.save-inv-btn').forEach(b => {
+    b.addEventListener('click', async () => {
+      const id = b.dataset.id;
+      const input = container.querySelector(`.inv-input[data-id="${id}"]`);
+      if (input) {
+        await updateDoc(doc(db, 'products', id), { stock: Number(input.value) });
+        showToast('স্টক আপডেট সফল হয়েছে', 'success');
+      }
+    });
+  });
+}
+
+// 9. Admin Chat Dashboard
+function renderAdminChatTab(container) {
+  container.innerHTML = `
+    <div class="admin-chat-grid">
+      <!-- Chat user list -->
+      <div class="border-r border-slate-200 overflow-y-auto" id="admin-chat-user-list">
+        <div class="p-3 text-xs text-slate-400">চ্যাট তালিকা লোড হচ্ছে...</div>
+      </div>
+
+      <!-- Chat thread view -->
+      <div class="flex flex-col h-full bg-slate-50" id="admin-chat-thread">
+        <div class="flex-1 flex items-center justify-center p-6 text-slate-400 text-xs text-center">
+          বাঁদিকের তালিকা থেকে যেকোনো গ্রাহক নির্বাচন করুন
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Listen to all active chats
+  onSnapshot(collection(db, 'chats'), (snapshot) => {
+    const listContainer = container.querySelector('#admin-chat-user-list');
+    if (!listContainer) return;
+
+    listContainer.innerHTML = '';
+    if (snapshot.empty) {
+      listContainer.innerHTML = `<div class="p-4 text-xs text-slate-400">কোনো একটিভ চ্যাট নেই</div>`;
+      return;
+    }
+
+    snapshot.forEach(d => {
+      const c = d.data();
+      const item = document.createElement('div');
+      item.className = 'p-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer text-xs';
+      item.innerHTML = `
+        <div class="flex items-center justify-between font-bold text-slate-800">
+          <span>${escapeHtml(c.userName || 'গ্রাহক')}</span>
+          ${c.unreadAdmin ? `<span class="w-2 h-2 rounded-full bg-red-500"></span>` : ''}
+        </div>
+        <p class="text-slate-500 truncate mt-0.5">${escapeHtml(c.lastMessage || '')}</p>
+      `;
+
+      item.addEventListener('click', () => {
+        openAdminChatThread(d.id, c, container.querySelector('#admin-chat-thread'));
+      });
+
+      listContainer.appendChild(item);
+    });
+  });
+}
+
+function openAdminChatThread(chatId, chatMeta, threadBox) {
+  threadBox.innerHTML = `
+    <div class="p-3 border-b border-slate-200 bg-white font-bold text-xs text-slate-800">
+      ${escapeHtml(chatMeta.userName || 'গ্রাহক')} - ${escapeHtml(chatMeta.userEmail || '')}
+    </div>
+
+    <div id="admin-msg-box" class="flex-1 p-3 overflow-y-auto space-y-2"></div>
+
+    <form id="admin-chat-form" class="p-2 bg-white border-t border-slate-200 flex gap-2">
+      <input type="text" id="admin-msg-input" placeholder="উত্তর লিখুন..." class="flex-1 text-xs p-2 border border-slate-300 rounded-lg focus:outline-none" />
+      <button type="submit" class="px-4 py-2 bg-teal-700 text-white font-bold text-xs rounded-lg">পাঠান</button>
+    </form>
+  `;
+
+  // Listen to messages
+  const msgBox = threadBox.querySelector('#admin-msg-box');
+  const messagesRef = collection(db, 'chats', chatId, 'messages');
+  const q = query(messagesRef, orderBy('timestamp', 'asc'));
+
+  onSnapshot(q, (snapshot) => {
+    msgBox.innerHTML = '';
+    snapshot.forEach(docSnap => {
+      const msg = docSnap.data();
+      const isAdmin = msg.sender === 'admin';
+
+      const b = document.createElement('div');
+      b.className = `p-2 rounded-xl text-xs max-w-[80%] ${isAdmin ? 'bg-teal-700 text-white ml-auto' : 'bg-white text-slate-800 border border-slate-200'}`;
+      b.textContent = msg.text;
+      msgBox.appendChild(b);
+    });
+    msgBox.scrollTop = msgBox.scrollHeight;
+  });
+
+  // Clear unread flag
+  updateDoc(doc(db, 'chats', chatId), { unreadAdmin: false });
+
+  // Form submit
+  threadBox.querySelector('#admin-chat-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = threadBox.querySelector('#admin-msg-input');
+    const txt = input.value.trim();
+    if (txt) {
+      await addDoc(messagesRef, {
+        sender: 'admin',
+        text: txt,
+        timestamp: new Date().toISOString()
+      });
+      await updateDoc(doc(db, 'chats', chatId), {
+        lastMessage: txt,
+        lastUpdated: new Date().toISOString()
+      });
+      input.value = '';
+    }
+  });
+}
+
+// 10. Notifications Module
+function renderNotificationsTab(container) {
+  container.innerHTML = `
+    <div class="max-w-md bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
+      <h2 class="text-xl font-bold text-slate-800">প পুশ নোটিফিকেশন পাঠান</h2>
+
+      <form id="send-notif-form" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold mb-1">নোটিফিকেশন শিরোনাম *</label>
+          <input type="text" id="n-title" required placeholder="আজকের বিশেষ ছাড়!" class="w-full p-2 border border-slate-300 rounded-lg" />
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">বার্তা *</label>
+          <textarea id="n-body" required rows="3" placeholder="সব ক্যাটাগরিতে ২০% পর্যন্ত ফ্ল্যাট অফার..." class="w-full p-2 border border-slate-300 rounded-lg"></textarea>
+        </div>
+        <button type="submit" class="w-full py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-lg transition">নোটিফিকেশন পাঠান</button>
+      </form>
+    </div>
+  `;
+
+  container.querySelector('#send-notif-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const title = container.querySelector('#n-title').value;
+    const body = container.querySelector('#n-body').value;
+
+    await addDoc(collection(db, 'notifications'), {
+      userId: 'all',
+      title,
+      body,
+      createdAt: new Date().toISOString()
+    });
+
+    showToast('নোটিফিকেশন পাঠানো হয়েছে', 'success');
+    container.querySelector('#send-notif-form').reset();
+  });
+}

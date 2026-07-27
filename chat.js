@@ -1,156 +1,120 @@
-// Real-Time Customer Live Support Chat Module
 import { 
   db, 
   collection, 
-  doc, 
-  getDoc, 
-  setDoc, 
   addDoc, 
+  doc, 
+  setDoc, 
   onSnapshot, 
   query, 
   orderBy, 
-  serverTimestamp 
-} from "./firebase-config.js";
-import { currentUser, currentUserProfile } from "./auth.js";
-import { formatDate, escapeHtml, showToast } from "./core.js";
+  serverTimestamp,
+  updateDoc
+} from './firebase-config.js';
+import { formatDate, showToast, escapeHtml } from './core.js';
+import { getCurrentUser, getUserProfile } from './auth.js';
 
-let chatUnsubscribe = null;
+let messageUnsubscribe = null;
 
-// Initialize or Load Chat Thread
-export function renderChatView(containerEl) {
-  if (!currentUser) {
-    containerEl.innerHTML = `
-      <div class="py-12 text-center">
-        <div class="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-3 text-blue-600">
-          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
-        </div>
-        <h3 class="text-sm font-bold text-slate-800 mb-1">লাইভ চ্যাট সাপোর্ট</h3>
-        <p class="text-xs text-slate-500 mb-4">আমাদের এডমিন প্রতিনিধির সাথে সরাসরি কথা বলতে লগইন করুন।</p>
-        <a href="#profile" class="inline-flex items-center gap-2 bg-emerald-700 text-white font-bold px-5 py-2.5 rounded-xl text-xs min-h-[44px]">
-          সাইন ইন করুন
-        </a>
+export function initLiveChat(chatContainer, statusBadge) {
+  const user = getCurrentUser();
+  const profile = getUserProfile();
+
+  if (!user) {
+    chatContainer.innerHTML = `
+      <div class="flex flex-col items-center justify-center h-full p-6 text-center">
+        <svg class="w-16 h-16 text-slate-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+        <h3 class="font-semibold text-slate-800 text-base mb-1">লাইভ চ্যাট সার্ভিস</h3>
+        <p class="text-xs text-slate-500 mb-4">অ্যাডমিনের সাথে সরাসরি কথা বলতে লগইন করুন</p>
+        <button id="chat-login-trigger" class="px-5 py-2 bg-teal-700 text-white font-medium rounded-lg text-sm hover:bg-teal-800 transition">লগইন করুন</button>
       </div>
     `;
+
+    document.getElementById('chat-login-trigger')?.addEventListener('click', () => {
+      document.getElementById('auth-modal')?.classList.remove('hidden');
+    });
     return;
   }
 
-  const chatId = currentUser.uid;
+  const chatId = user.uid;
 
-  containerEl.innerHTML = `
-    <div class="chat-container">
-      
-      <!-- Chat Header -->
-      <div class="p-3 bg-emerald-800 text-white flex items-center justify-between">
-        <div class="flex items-center gap-2.5">
-          <div class="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></div>
-          <div>
-            <h3 class="text-xs font-bold leading-tight">আপনবাজার কাস্টমার কেয়ার</h3>
-            <span class="text-[10px] text-emerald-200">এডমিন অনলাইনে আছেন</span>
-          </div>
-        </div>
-      </div>
+  // Set chat metadata document
+  setDoc(doc(db, 'chats', chatId), {
+    userId: user.uid,
+    userName: profile?.fullName || user.displayName || 'গ্রাহক',
+    userEmail: user.email || '',
+    userPhone: profile?.phone || '',
+    lastUpdated: new Date().toISOString(),
+    unreadAdmin: true
+  }, { merge: true });
 
-      <!-- Live Messages Stream -->
-      <div class="chat-messages" id="chat-messages-body">
-        <div class="text-center text-slate-400 text-xs py-4">বার্তা লোড হচ্ছে...</div>
-      </div>
+  // Listen to messages in real time
+  const messagesRef = collection(db, 'chats', chatId, 'messages');
+  const q = query(messagesRef, orderBy('timestamp', 'asc'));
 
-      <!-- Chat Input Form -->
-      <form onsubmit="window.sendChatMessage(event)" class="p-2 border-t border-slate-200 bg-white flex items-center gap-2">
-        <input 
-          type="text" 
-          id="chat-input-text" 
-          placeholder="আপনার মেসেজ লিখুন..." 
-          required 
-          class="flex-1 bg-slate-100 border border-slate-200 rounded-full px-4 py-2 text-xs focus:outline-none focus:border-emerald-600 focus:bg-white"
-        >
-        <button type="submit" class="w-10 h-10 rounded-full bg-emerald-700 text-white flex items-center justify-center shrink-0 min-h-[44px]">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-        </button>
-      </form>
+  if (messageUnsubscribe) messageUnsubscribe();
 
-    </div>
-  `;
-
-  // Start Realtime Listener
-  listenToChatMessages(chatId);
-}
-
-// Subscribe to Firestore Chat Messages
-function listenToChatMessages(chatId) {
-  if (!db) return;
-  if (chatUnsubscribe) chatUnsubscribe();
-
-  const messagesRef = collection(db, "chats", chatId, "messages");
-  const q = query(messagesRef, orderBy("timestamp", "asc"));
-
-  chatUnsubscribe = onSnapshot(q, (snapshot) => {
-    const messagesBody = document.getElementById("chat-messages-body");
-    if (!messagesBody) return;
-
+  messageUnsubscribe = onSnapshot(q, (snapshot) => {
+    chatContainer.innerHTML = '';
     if (snapshot.empty) {
-      messagesBody.innerHTML = `
-        <div class="text-center py-8 text-slate-400 text-xs space-y-1">
-          <p>স্বাগতম! আপনার যেকোনো প্রশ্ন বা অনুসন্ধানের জন্য এখানে মেসেজ দিন।</p>
+      chatContainer.innerHTML = `
+        <div class="text-center py-10 text-xs text-slate-400">
+          <p>বাংলামার্ট হেল্পডেস্কে স্বাগতম! আপনার যেকোনো প্রশ্ন এখানে লিখুন।</p>
         </div>
       `;
-      return;
+    } else {
+      snapshot.forEach(docSnap => {
+        const msg = docSnap.data();
+        const isUser = msg.sender === 'user';
+        
+        const bubble = document.createElement('div');
+        bubble.className = `chat-bubble ${isUser ? 'user' : 'admin'} mb-2 shadow-2xs`;
+        
+        let contentHtml = escapeHtml(msg.text || '');
+        if (msg.imageUrl) {
+          contentHtml += `<img src="${escapeHtml(msg.imageUrl)}" class="mt-2 rounded-lg max-w-xs object-cover border border-slate-200" loading="lazy"/>`;
+        }
+
+        bubble.innerHTML = `
+          <div>${contentHtml}</div>
+          <div class="text-[10px] opacity-70 text-right mt-1">${formatDate(msg.timestamp)}</div>
+        `;
+
+        chatContainer.appendChild(bubble);
+      });
+
+      // Auto scroll to bottom
+      chatContainer.scrollTop = chatContainer.scrollHeight;
     }
-
-    messagesBody.innerHTML = snapshot.docs.map(docSnap => {
-      const msg = docSnap.data();
-      const isMe = msg.senderRole === "customer";
-
-      return `
-        <div class="chat-bubble ${isMe ? 'chat-bubble-user' : 'chat-bubble-admin'}">
-          <p>${escapeHtml(msg.text)}</p>
-          <div class="chat-time">${formatDate(msg.timestamp)}</div>
-        </div>
-      `;
-    }).join('');
-
-    messagesBody.scrollTop = messagesBody.scrollHeight;
-  }, (error) => {
-    console.error("Chat subscription error:", error);
+  }, (err) => {
+    console.error('Chat error:', err);
   });
 }
 
-// Send Chat Message
-window.sendChatMessage = async function(event) {
-  event.preventDefault();
-  if (!currentUser || !db) return;
+export async function sendChatMessage(text, imageUrl = '') {
+  const user = getCurrentUser();
+  if (!user) return;
 
-  const input = document.getElementById("chat-input-text");
-  const text = input?.value.trim();
-  if (!text) return;
+  if (!text.trim() && !imageUrl) return;
 
-  const chatId = currentUser.uid;
-  input.value = "";
+  const chatId = user.uid;
+  const messagesRef = collection(db, 'chats', chatId, 'messages');
 
   try {
-    // Ensure Chat parent document exists
-    await setDoc(doc(db, "chats", chatId), {
-      chatId,
-      userId: currentUser.uid,
-      userName: currentUserProfile?.fullName || currentUser.email,
-      userEmail: currentUser.email,
-      lastMessage: text,
-      lastMessageTimestamp: new Date().toISOString(),
-      unreadAdmin: 1,
-      isUserOnline: true
-    }, { merge: true });
-
-    // Add message
-    await addDoc(collection(db, "chats", chatId, "messages"), {
-      chatId,
-      senderId: currentUser.uid,
-      senderRole: "customer",
-      text,
-      timestamp: new Date().toISOString(),
-      isRead: false
+    await addDoc(messagesRef, {
+      sender: 'user',
+      text: text.trim(),
+      imageUrl: imageUrl,
+      timestamp: new Date().toISOString()
     });
 
+    // Update parent chat doc
+    await updateDoc(doc(db, 'chats', chatId), {
+      lastMessage: text.trim() || 'ছবি সংযুক্ত করা হয়েছে',
+      lastUpdated: new Date().toISOString(),
+      unreadAdmin: true
+    });
   } catch (err) {
-    showToast("মেসেজ পাঠানো সম্ভব হয়নি", "error");
+    console.error('Error sending message:', err);
+    showToast('মেসেজ পাঠানো সম্ভব হয়নি', 'error');
   }
-};
+}

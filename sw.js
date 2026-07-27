@@ -1,20 +1,16 @@
-// AponBazar Progressive Web App Service Worker
-const CACHE_NAME = 'aponbazar-v1';
+const CACHE_NAME = 'banglamart-v1';
 const ASSETS_TO_CACHE = [
-  './',
-  './index.html',
-  './admin.html',
-  './style.css',
-  './pages.css',
-  './admin.css',
-  './core.js',
-  './auth.js',
-  './shop.js',
-  './cart-checkout.js',
-  './chat.js',
-  './app.js',
-  './admin.js',
-  './icons.svg'
+  '/',
+  '/index.html',
+  '/style.css',
+  '/pages.css',
+  '/core.js',
+  '/auth.js',
+  '/shop.js',
+  '/cart-checkout.js',
+  '/chat.js',
+  '/app.js',
+  '/icons.svg'
 ];
 
 self.addEventListener('install', (event) => {
@@ -28,11 +24,11 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
+    caches.keys().then((keys) => {
       return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
           }
         })
       );
@@ -42,20 +38,10 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-  
+  // Network first, fallback to cache
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Return cache and fetch fresh in background
-        fetch(event.request).then((networkResponse) => {
-          if (networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
-          }
-        }).catch(() => {});
-        return cachedResponse;
-      }
-      return fetch(event.request);
+    fetch(event.request).catch(() => {
+      return caches.match(event.request);
     })
   );
 });

@@ -1,6 +1,6 @@
 {
-  "name": "AponBazar — Premium E-Commerce",
-  "description": "Mobile-first Bangladeshi E-Commerce platform with real-time Firebase backend, admin dashboard, live chat, bKash/Nagad support, and PWA capabilities.",
+  "name": "BanglaMart E-Commerce",
+  "description": "Premium mobile-first Bangladeshi e-commerce platform with real-time chat, bKash/Nagad payments, and admin dashboard.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
