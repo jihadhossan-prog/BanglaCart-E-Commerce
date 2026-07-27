@@ -1,0 +1,123 @@
+/* Admin Panel Styling */
+body.admin-body {
+  background-color: #F1F5F9;
+  color: #0F172A;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.admin-sidebar {
+  width: 260px;
+  background-color: #0F172A;
+  color: #F8FAFC;
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  z-index: 40;
+}
+
+.admin-content {
+  margin-left: 260px;
+  padding: 24px;
+  min-height: 100vh;
+}
+
+@media (max-width: 1024px) {
+  .admin-sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+  .admin-sidebar.active {
+    transform: translateX(0);
+  }
+  .admin-content {
+    margin-left: 0;
+    padding: 16px;
+  }
+}
+
+.admin-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: #94A3B8;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.admin-nav-item:hover, .admin-nav-item.active {
+  background-color: #1E293B;
+  color: #38BDF8;
+}
+
+.stat-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.admin-table th {
+  background-color: #F8FAFC;
+  color: #64748B;
+  font-weight: 600;
+  text-align: left;
+  padding: 12px 16px;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.admin-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #F1F5F9;
+  color: #334155;
+}
+
+/* Status Badges */
+.badge-pending { background: #FEF3C7; color: #92400E; font-weight: 700; padding: 2px 8px; border-radius: 9999px; font-size: 11px; }
+.badge-confirmed { background: #DBEAFE; color: #1E40AF; font-weight: 700; padding: 2px 8px; border-radius: 9999px; font-size: 11px; }
+.badge-shipped { background: #E0E7FF; color: #3730A3; font-weight: 700; padding: 2px 8px; border-radius: 9999px; font-size: 11px; }
+.badge-delivered { background: #D1FAE5; color: #065F46; font-weight: 700; padding: 2px 8px; border-radius: 9999px; font-size: 11px; }
+.badge-cancelled { background: #FEE2E2; color: #991B1B; font-weight: 700; padding: 2px 8px; border-radius: 9999px; font-size: 11px; }
+
+/* Chart Bars */
+.chart-bar-container {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  height: 180px;
+  padding-top: 20px;
+}
+
+.chart-bar {
+  flex: 1;
+  background: var(--primary);
+  border-radius: 8px 8px 0 0;
+  transition: height 0.5s ease;
+  position: relative;
+}
+
+.chart-bar:hover::after {
+  content: attr(data-value);
+  position: absolute;
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0F172A;
+  color: #fff;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
