@@ -1,0 +1,56 @@
+/* User-Facing App Color Variables */
+:root {
+  /* Text Colors */
+  --text-primary: #0f172a;        /* slate-900 / headings */
+  --text-secondary: #334155;      /* slate-700 / subheadings */
+  --text-muted: #64748b;          /* slate-500 / muted text */
+  --text-light: #94a3b8;          /* slate-400 / very muted text */
+  --text-link: #0f766e;           /* teal-700 / links */
+  --text-inverse: #ffffff;        /* white text on dark/primary */
+
+  /* Icon Colors */
+  --icon-default: #64748b;        /* slate-500 / default icon */
+  --icon-muted: #94a3b8;          /* slate-400 / muted icon */
+  --icon-primary: #0f766e;        /* teal-700 / primary icon */
+  --icon-accent: #d97706;         /* amber-600 / rating/accent icon */
+
+  /* Background Colors */
+  --bg-page: #f8fafc;             /* slate-50 / page background */
+  --bg-card: #ffffff;             /* white / card background */
+  --bg-header: #ffffff;           /* white / header background */
+  --bg-bottom-nav: rgba(255, 255, 255, 0.95); /* bottom nav bg */
+  --bg-surface: #f1f5f9;          /* slate-100 / surface / hover */
+  --bg-accent-light: #f0fdf4;     /* emerald-50 / success light bg */
+  --bg-badge: #fef3c7;            /* amber-100 / badge bg */
+
+  /* Border Colors */
+  --border-default: #e2e8f0;      /* slate-200 / default border */
+  --border-light: #f1f5f9;        /* slate-100 / subtle border */
+  --border-primary: #0f766e;      /* teal-700 / active/primary border */
+
+  /* Button Colors */
+  --btn-primary-bg: #0f766e;      /* teal-700 */
+  --btn-primary-hover: #0d9488;   /* teal-600 */
+  --btn-primary-text: #ffffff;
+  --btn-secondary-bg: #f1f5f9;    /* slate-100 */
+  --btn-secondary-hover: #e2e8f0; /* slate-200 */
+  --btn-secondary-text: #334155;  /* slate-700 */
+
+  /* Brand / Accent Colors */
+  --brand-primary: #0f766e;       /* teal-700 */
+  --brand-primary-hover: #0d9488; /* teal-600 */
+  --brand-accent: #d97706;        /* amber-600 */
+  --price-color: #0f766e;         /* teal-700 / price text */
+  --discount-badge-bg: #ef4444;   /* red-500 / discount badge */
+  --discount-badge-text: #ffffff;
+
+  /* Status Colors */
+  --status-success-bg: #d1fae5;   /* emerald-100 */
+  --status-success-text: #065f46; /* emerald-800 */
+  --status-error-bg: #fee2e2;     /* rose-100 */
+  --status-error-text: #991b1b;   /* rose-800 */
+  --status-warning-bg: #fef3c7;   /* amber-100 */
+  --status-warning-text: #92400e; /* amber-800 */
+  --status-info-bg: #e0f2fe;      /* sky-100 */
+  --status-info-text: #0369a1;    /* sky-800 */
+}
