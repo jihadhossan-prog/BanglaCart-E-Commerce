@@ -1135,39 +1135,180 @@ function openAdminChatThread(chatId, chatMeta, threadBox) {
 }
 
 // 10. Notifications Module
-function renderNotificationsTab(container) {
-  container.innerHTML = `
-    <div class="max-w-md bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
-      <h2 class="text-xl font-bold text-slate-800">প পুশ নোটিফিকেশন পাঠান</h2>
+async function renderNotificationsTab(container) {
+  let users = [];
+  try {
+    const userSnap = await getDocs(collection(db, 'users'));
+    userSnap.forEach(d => users.push({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.error('Error fetching users for notifications:', err);
+  }
 
-      <form id="send-notif-form" class="space-y-3 text-xs">
-        <div>
-          <label class="block font-semibold mb-1">নোটিফিকেশন শিরোনাম *</label>
-          <input type="text" id="n-title" required placeholder="আজকের বিশেষ ছাড়!" class="w-full p-2 border border-slate-300 rounded-lg" />
+  container.innerHTML = `
+    <div class="space-y-6 max-w-5xl">
+      <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-2xs space-y-4 max-w-xl">
+        <h2 class="text-xl font-bold text-slate-800">পেশ নোটিফিকেশন পাঠান</h2>
+
+        <form id="send-notif-form" class="space-y-3 text-xs">
+          <div>
+            <label class="block font-semibold mb-1">প্রাপক (Target) *</label>
+            <select id="n-target-type" class="w-full p-2 border border-slate-300 rounded-lg bg-white font-semibold">
+              <option value="all">সবার জন্য (Broadcast - All Users)</option>
+              <option value="individual">নির্দিষ্ট ইউজার (Individual User)</option>
+            </select>
+          </div>
+
+          <div id="n-user-select-container" class="hidden">
+            <label class="block font-semibold mb-1">কাস্টমার নির্বাচন করুন *</label>
+            <select id="n-user-id" class="w-full p-2 border border-slate-300 rounded-lg bg-white">
+              <option value="">-- ইউজার বেছে নিন --</option>
+              ${users.filter(u => u.role !== 'admin').map(u => `
+                <option value="${u.id}">${escapeHtml(u.fullName || 'নামহীন')} (${escapeHtml(u.email || u.phone || u.id)})</option>
+              `).join('')}
+            </select>
+          </div>
+
+          <div>
+            <label class="block font-semibold mb-1">নোটিফিকেশন শিরোনাম *</label>
+            <input type="text" id="n-title" required placeholder="আজকের বিশেষ ছাড়!" class="w-full p-2 border border-slate-300 rounded-lg" />
+          </div>
+          <div>
+            <label class="block font-semibold mb-1">বার্তা (Body) *</label>
+            <textarea id="n-body" required rows="3" placeholder="সব ক্যাটাগরিতে ২০% পর্যন্ত ফ্ল্যাট অফার..." class="w-full p-2 border border-slate-300 rounded-lg"></textarea>
+          </div>
+          <button type="submit" class="w-full py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-lg transition shadow-sm">নোটিফিকেশন পাঠান</button>
+        </form>
+      </div>
+
+      <div class="space-y-3">
+        <h3 class="text-lg font-bold text-slate-800">অ্যাডমিন কর্তৃক প্রেরিত নোটিফিকেশনসমূহ</h3>
+        <div id="admin-sent-notifs-list" class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div class="p-4 text-xs text-slate-400">লোড হচ্ছে...</div>
         </div>
-        <div>
-          <label class="block font-semibold mb-1">বার্তা *</label>
-          <textarea id="n-body" required rows="3" placeholder="সব ক্যাটাগরিতে ২০% পর্যন্ত ফ্ল্যাট অফার..." class="w-full p-2 border border-slate-300 rounded-lg"></textarea>
-        </div>
-        <button type="submit" class="w-full py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-lg transition">নোটিফিকেশন পাঠান</button>
-      </form>
+      </div>
     </div>
   `;
 
+  const targetTypeSel = container.querySelector('#n-target-type');
+  const userSelectContainer = container.querySelector('#n-user-select-container');
+
+  targetTypeSel.addEventListener('change', () => {
+    if (targetTypeSel.value === 'individual') {
+      userSelectContainer.classList.remove('hidden');
+    } else {
+      userSelectContainer.classList.add('hidden');
+    }
+  });
+
   container.querySelector('#send-notif-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const title = container.querySelector('#n-title').value;
-    const body = container.querySelector('#n-body').value;
+    const targetType = targetTypeSel.value;
+    const userId = targetType === 'individual' ? container.querySelector('#n-user-id').value : 'all';
+    const title = container.querySelector('#n-title').value.trim();
+    const body = container.querySelector('#n-body').value.trim();
 
-    await addDoc(collection(db, 'notifications'), {
-      userId: 'all',
-      title,
-      body,
-      createdAt: new Date().toISOString()
+    if (targetType === 'individual' && !userId) {
+      showToast('দয়া করে একজন কাস্টমার নির্বাচন করুন', 'error');
+      return;
+    }
+
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        userId,
+        title,
+        body,
+        sentByAdmin: true,
+        createdAt: new Date().toISOString(),
+        read: false
+      });
+
+      showToast('নোটিফিকেশন সফলভাবে পাঠানো হয়েছে', 'success');
+      container.querySelector('#send-notif-form').reset();
+      userSelectContainer.classList.add('hidden');
+    } catch (err) {
+      console.error('Error sending notification:', err);
+      showToast('নোটিফিকেশন পাঠাতে সমস্যা হয়েছে', 'error');
+    }
+  });
+
+  // Listen to admin-sent notifications
+  const notifsListContainer = container.querySelector('#admin-sent-notifs-list');
+  const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
+
+  onSnapshot(q, (snapshot) => {
+    if (!notifsListContainer) return;
+    const notifs = [];
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      if (data.sentByAdmin === true) {
+        notifs.push({ id: docSnap.id, ...data });
+      }
     });
 
-    showToast('নোটিফিকেশন পাঠানো হয়েছে', 'success');
-    container.querySelector('#send-notif-form').reset();
+    if (notifs.length === 0) {
+      notifsListContainer.innerHTML = `<div class="p-6 text-center text-xs text-slate-400">কোনো অ্যাডমিন নোটিফিকেশন পাঠানো হয়নি</div>`;
+      return;
+    }
+
+    const userMap = {};
+    users.forEach(u => { userMap[u.id] = u; });
+
+    notifsListContainer.innerHTML = `
+      <div class="table-responsive">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>ধরন (Type)</th>
+              <th>প্রাপক (Target)</th>
+              <th>শিরোনাম ও বার্তা</th>
+              <th>তারিখ ও সময়</th>
+              <th>অ্যাকশন</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${notifs.map(n => {
+              const isAll = n.userId === 'all';
+              const targetUser = userMap[n.userId];
+              const targetName = isAll ? 'সবাই (Broadcast)' : (targetUser ? `${escapeHtml(targetUser.fullName || '')} (${escapeHtml(targetUser.email || targetUser.phone || n.userId)})` : n.userId);
+
+              return `
+                <tr>
+                  <td>
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold ${isAll ? 'bg-emerald-100 text-emerald-800' : 'bg-purple-100 text-purple-800'}">
+                      ${isAll ? 'সবার জন্য' : 'ব্যক্তিগত'}
+                    </span>
+                  </td>
+                  <td class="font-semibold text-slate-800 text-xs">${targetName}</td>
+                  <td>
+                    <div class="font-bold text-slate-900">${escapeHtml(n.title)}</div>
+                    <div class="text-slate-500 text-[11px] line-clamp-2 mt-0.5">${escapeHtml(n.body)}</div>
+                  </td>
+                  <td class="text-slate-500 text-[11px] whitespace-nowrap">${n.createdAt ? new Date(n.createdAt).toLocaleString('bn-BD') : 'N/A'}</td>
+                  <td>
+                    <button class="del-admin-notif px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs font-semibold transition" data-id="${n.id}">মুছুন</button>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+
+    notifsListContainer.querySelectorAll('.del-admin-notif').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const notifId = btn.dataset.id;
+        if (!confirm('এই নোটিফিকেশনটি মুছে ফেলতে চান?')) return;
+
+        try {
+          await deleteDoc(doc(db, 'notifications', notifId));
+          showToast('নোটিফিকেশন সফলভাবে মুছে ফেলা হয়েছে', 'success');
+        } catch (err) {
+          console.error('Error deleting notification:', err);
+          showToast('নোটিফিকেশন মোছা যায়নি', 'error');
+        }
+      });
+    });
   });
 }
 
