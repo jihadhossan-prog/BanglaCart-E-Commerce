@@ -723,7 +723,7 @@ async function renderOrdersTab(container) {
       try {
         const orderSnap = await getDoc(doc(db, 'orders', orderId));
         if (orderSnap.exists()) {
-          showOrderDetailsModal(orderSnap.id, orderSnap.data());
+          await showOrderDetailsModal(orderSnap.id, orderSnap.data());
         } else {
           showToast('অর্ডার পাওয়া যায়নি', 'error');
         }
@@ -736,7 +736,20 @@ async function renderOrdersTab(container) {
 }
 
 // Order Details Modal
-function showOrderDetailsModal(orderId, order) {
+async function showOrderDetailsModal(orderId, order) {
+  let customerEmail = order.customerInfo?.email || 'N/A';
+  if (order.userId && order.userId !== 'guest') {
+    try {
+      const uSnap = await getDoc(doc(db, 'users', order.userId));
+      if (uSnap.exists()) {
+        const uData = uSnap.data();
+        if (uData.email) customerEmail = uData.email;
+      }
+    } catch (e) {
+      console.error('Error fetching customer email:', e);
+    }
+  }
+
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200';
   modal.id = 'order-details-modal';
@@ -746,80 +759,90 @@ function showOrderDetailsModal(orderId, order) {
 
   modal.innerHTML = `
     <div class="bg-white w-full max-w-2xl max-h-[90vh] rounded-2xl overflow-y-auto p-6 shadow-2xl relative flex flex-col gap-4 text-left">
-      <button id="close-order-modal-btn" class="absolute top-4 right-4 p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-      </button>
-
-      <div class="border-b pb-3 border-slate-200">
-        <span class="text-xs font-semibold text-teal-700 bg-teal-50 px-2 py-1 rounded">অর্ডার নম্বর: #${escapeHtml(order.orderNumber)}</span>
-        <h2 class="text-lg font-bold text-slate-900 mt-2">অর্ডার বিবরণী</h2>
-        <p class="text-xs text-slate-500">তারিখ: ${new Date(order.createdAt).toLocaleString('bn-BD')}</p>
+      <div class="flex items-center justify-between border-b pb-3 border-slate-200">
+        <div>
+          <span class="text-xs font-semibold text-teal-700 bg-teal-50 px-2 py-1 rounded">অর্ডার নম্বর: #${escapeHtml(order.orderNumber)}</span>
+          <h2 class="text-lg font-bold text-slate-900 mt-2">অর্ডার বিবরণী</h2>
+          <p class="text-xs text-slate-500">তারিখ: ${new Date(order.createdAt).toLocaleString('bn-BD')}</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="download-order-img-btn" class="px-3 py-1.5 bg-teal-700 text-white font-semibold text-xs rounded-lg hover:bg-teal-800 transition flex items-center gap-1 cursor-pointer">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            <span>ছবি হিসেবে ডাউনলোড করুন</span>
+          </button>
+          <button id="close-order-modal-btn" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition cursor-pointer">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
       </div>
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-        <!-- Customer & Shipping details -->
-        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
-          <h3 class="font-bold text-slate-800 text-sm border-b pb-1">গ্রাহক ও ডেলিভারি তথ্য</h3>
-          <div><span class="font-semibold text-slate-500">নাম:</span> <span class="font-bold text-slate-800">${escapeHtml(cInfo.fullName || 'N/A')}</span></div>
-          <div><span class="font-semibold text-slate-500">মোবাইল:</span> <span class="font-bold text-slate-800">${escapeHtml(cInfo.phone || 'N/A')}</span></div>
-          <div><span class="font-semibold text-slate-500">বিভাগ:</span> <span class="text-slate-800">${escapeHtml(cInfo.division || 'N/A')}</span></div>
-          <div><span class="font-semibold text-slate-500">জেলা:</span> <span class="text-slate-800">${escapeHtml(cInfo.district || 'N/A')}</span></div>
-          <div><span class="font-semibold text-slate-500">উপজেলা/থানা:</span> <span class="text-slate-800">${escapeHtml(cInfo.upazila || 'N/A')}</span></div>
-          <div><span class="font-semibold text-slate-500">এলাকা:</span> <span class="text-slate-800">${escapeHtml(cInfo.area || 'N/A')}</span></div>
-          <div><span class="font-semibold text-slate-500">বিস্তারিত ঠিকানা:</span> <span class="text-slate-800">${escapeHtml(cInfo.address || 'N/A')}</span></div>
-          ${cInfo.note ? `<div class="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-amber-900"><span class="font-semibold">ডেলিভারি নোট:</span> ${escapeHtml(cInfo.note)}</div>` : ''}
-        </div>
-
-        <!-- Payment Info & Status -->
-        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2 flex flex-col justify-between">
-          <div class="space-y-2">
-            <h3 class="font-bold text-slate-800 text-sm border-b pb-1">পেমেন্ট ও স্ট্যাটাস</h3>
-            <div><span class="font-semibold text-slate-500">পেমেন্ট পদ্ধতি:</span> <span class="font-bold text-slate-800 uppercase">${escapeHtml(order.paymentMethod || 'N/A')}</span></div>
-            ${order.trxId ? `<div><span class="font-semibold text-slate-500">Trx ID:</span> <span class="font-bold text-teal-700">${escapeHtml(order.trxId)}</span></div>` : ''}
-            <div><span class="font-semibold text-slate-500">পেমেন্ট স্ট্যাটাস:</span> <span class="font-bold px-2 py-0.5 rounded text-[10px] ${order.paymentStatus === 'Paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">${escapeHtml(order.paymentStatus || 'Unpaid')}</span></div>
-            <div><span class="font-semibold text-slate-500">ডেলিভারি স্ট্যাটাস:</span> <span class="font-bold px-2 py-0.5 rounded text-[10px] bg-blue-100 text-blue-800">${escapeHtml(order.orderStatus || 'Processing')}</span></div>
+      <div id="order-printable-area" class="space-y-4 bg-white p-2">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <!-- Customer & Shipping details -->
+          <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
+            <h3 class="font-bold text-slate-800 text-sm border-b pb-1">গ্রাহক ও ডেলিভারি তথ্য</h3>
+            <div><span class="font-semibold text-slate-500">নাম:</span> <span class="font-bold text-slate-800">${escapeHtml(cInfo.fullName || 'N/A')}</span></div>
+            <div><span class="font-semibold text-slate-500">মোবাইল:</span> <span class="font-bold text-slate-800">${escapeHtml(cInfo.phone || 'N/A')}</span></div>
+            <div><span class="font-semibold text-slate-500">ইমেইল:</span> <span class="font-bold text-slate-800">${escapeHtml(customerEmail)}</span></div>
+            <div><span class="font-semibold text-slate-500">বিভাগ:</span> <span class="text-slate-800">${escapeHtml(cInfo.division || 'N/A')}</span></div>
+            <div><span class="font-semibold text-slate-500">জেলা:</span> <span class="text-slate-800">${escapeHtml(cInfo.district || 'N/A')}</span></div>
+            <div><span class="font-semibold text-slate-500">উপজেলা/থানা:</span> <span class="text-slate-800">${escapeHtml(cInfo.upazila || 'N/A')}</span></div>
+            <div><span class="font-semibold text-slate-500">এলাকা:</span> <span class="text-slate-800">${escapeHtml(cInfo.area || 'N/A')}</span></div>
+            <div><span class="font-semibold text-slate-500">বিস্তারিত ঠিকানা:</span> <span class="text-slate-800">${escapeHtml(cInfo.address || 'N/A')}</span></div>
+            ${cInfo.note ? `<div class="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-amber-900"><span class="font-semibold">ডেলিভারি নোট:</span> ${escapeHtml(cInfo.note)}</div>` : ''}
           </div>
-        </div>
-      </div>
 
-      <!-- Ordered Items -->
-      <div class="space-y-2">
-        <h3 class="font-bold text-slate-800 text-xs sm:text-sm">অর্ডারকৃত পণ্যসমূহ (${items.length})</h3>
-        <div class="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white max-h-48 overflow-y-auto">
-          ${items.map(item => `
-            <div class="p-3 flex items-center justify-between text-xs hover:bg-slate-50 transition">
-              <div class="flex items-center gap-2">
-                <img src="${getValidImageUrl(item.image)}" class="w-10 h-10 object-cover rounded-lg border border-slate-100" />
-                <div>
-                  <h4 class="font-semibold text-slate-800 line-clamp-1">${escapeHtml(item.name)}</h4>
-                  <p class="text-slate-500 text-[10px]">মূল্য: ${formatPrice(item.price)} x ${item.qty}</p>
-                </div>
-              </div>
-              <div class="font-bold text-slate-900">${formatPrice(item.price * item.qty)}</div>
+          <!-- Payment Info & Status -->
+          <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2 flex flex-col justify-between">
+            <div class="space-y-2">
+              <h3 class="font-bold text-slate-800 text-sm border-b pb-1">পেমেন্ট ও স্ট্যাটাস</h3>
+              <div><span class="font-semibold text-slate-500">পেমেন্ট পদ্ধতি:</span> <span class="font-bold text-slate-800 uppercase">${escapeHtml(order.paymentMethod || 'N/A')}</span></div>
+              ${order.trxId ? `<div><span class="font-semibold text-slate-500">Trx ID:</span> <span class="font-bold text-teal-700">${escapeHtml(order.trxId)}</span></div>` : ''}
+              <div><span class="font-semibold text-slate-500">পেমেন্ট স্ট্যাটাস:</span> <span class="font-bold px-2 py-0.5 rounded text-[10px] ${order.paymentStatus === 'Paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}">${escapeHtml(order.paymentStatus || 'Unpaid')}</span></div>
+              <div><span class="font-semibold text-slate-500">ডেলিভারি স্ট্যাটাস:</span> <span class="font-bold px-2 py-0.5 rounded text-[10px] bg-blue-100 text-blue-800">${escapeHtml(order.orderStatus || 'Processing')}</span></div>
             </div>
-          `).join('')}
-        </div>
-      </div>
-
-      <!-- Financial Calculation Summary -->
-      <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs space-y-1.5 ml-auto w-full max-w-sm">
-        <div class="flex justify-between text-slate-600">
-          <span>সাবটোটাল:</span>
-          <span>${formatPrice(order.subtotal || 0)}</span>
-        </div>
-        <div class="flex justify-between text-slate-600">
-          <span>ডেলিভারি চার্জ:</span>
-          <span>${formatPrice(order.deliveryChargeTotal || 0)}</span>
-        </div>
-        ${order.couponDiscount ? `
-          <div class="flex justify-between text-emerald-600 font-semibold">
-            <span>কুপন ছাড়:</span>
-            <span>-${formatPrice(order.couponDiscount)}</span>
           </div>
-        ` : ''}
-        <div class="flex justify-between text-sm font-extrabold text-teal-800 border-t pt-1.5 mt-1.5 border-slate-200">
-          <span>সর্বমোট দেয় টাকা:</span>
-          <span>${formatPrice(order.grandTotal || 0)}</span>
+        </div>
+
+        <!-- Ordered Items -->
+        <div class="space-y-2">
+          <h3 class="font-bold text-slate-800 text-xs sm:text-sm">অর্ডারকৃত পণ্যসমূহ (${items.length})</h3>
+          <div class="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white">
+            ${items.map(item => `
+              <div class="p-3 flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2">
+                  <img src="${getValidImageUrl(item.image)}" class="w-10 h-10 object-cover rounded-lg border border-slate-100" crossorigin="anonymous" />
+                  <div>
+                    <h4 class="font-semibold text-slate-800">${escapeHtml(item.name)}</h4>
+                    <p class="text-slate-500 text-[10px]">মূল্য: ${formatPrice(item.price)} x ${item.qty}</p>
+                  </div>
+                </div>
+                <div class="font-bold text-slate-900">${formatPrice(item.price * item.qty)}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Financial Calculation Summary -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs space-y-1.5 ml-auto w-full max-w-sm">
+          <div class="flex justify-between text-slate-600">
+            <span>সাবটোটাল:</span>
+            <span>${formatPrice(order.subtotal || 0)}</span>
+          </div>
+          <div class="flex justify-between text-slate-600">
+            <span>ডেলিভারি চার্জ:</span>
+            <span>${formatPrice(order.deliveryChargeTotal || 0)}</span>
+          </div>
+          ${order.couponDiscount ? `
+            <div class="flex justify-between text-emerald-600 font-semibold">
+              <span>কুপন ছাড়:</span>
+              <span>-${formatPrice(order.couponDiscount)}</span>
+            </div>
+          ` : ''}
+          <div class="flex justify-between text-sm font-extrabold text-teal-800 border-t pt-1.5 mt-1.5 border-slate-200">
+            <span>সর্বমোট দেয় টাকা:</span>
+            <span>${formatPrice(order.grandTotal || 0)}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -829,6 +852,27 @@ function showOrderDetailsModal(orderId, order) {
 
   modal.querySelector('#close-order-modal-btn').addEventListener('click', () => {
     modal.remove();
+  });
+
+  modal.querySelector('#download-order-img-btn').addEventListener('click', async () => {
+    const printableArea = modal.querySelector('#order-printable-area');
+    if (!window.html2canvas) {
+      showToast('html2canvas লোড হয়নি', 'error');
+      return;
+    }
+    try {
+      showToast('ছবি তৈরি হচ্ছে...', 'info');
+      const canvas = await window.html2canvas(printableArea, { scale: 2, useCORS: true });
+      const image = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = image;
+      a.download = `order-${order.orderNumber || orderId}.png`;
+      a.click();
+      showToast('ছবি সফলভাবে ডাউনলোড হয়েছে', 'success');
+    } catch (err) {
+      console.error('Error generating order image:', err);
+      showToast('ছবি তৈরি করতে সমস্যা হয়েছে', 'error');
+    }
   });
 }
 
