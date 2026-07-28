@@ -13,7 +13,10 @@ import {
   query, 
   where, 
   orderBy, 
-  onSnapshot 
+  limit,
+  startAfter,
+  onSnapshot,
+  getCountFromServer
 } from './firebase-config.js';
 import { formatPrice, showToast, escapeHtml, getValidImageUrl } from './core.js';
 import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
@@ -105,16 +108,18 @@ async function renderAdminTab(tab) {
 // 1. Dashboard Module
 async function renderDashboardTab(container) {
   try {
-    const [ordersSnap, productsSnap, usersSnap] = await Promise.all([
-      getDocs(collection(db, 'orders')),
-      getDocs(collection(db, 'products')),
-      getDocs(collection(db, 'users'))
+    const [ordersCountSnap, productsCountSnap, usersCountSnap, ordersSnap, productsSnap] = await Promise.all([
+      getCountFromServer(collection(db, 'orders')),
+      getCountFromServer(collection(db, 'products')),
+      getCountFromServer(collection(db, 'users')),
+      getDocs(query(collection(db, 'orders'), limit(100))),
+      getDocs(query(collection(db, 'products'), limit(100)))
     ]);
 
     let totalRevenue = 0;
-    let orderCount = ordersSnap.size;
-    let productCount = productsSnap.size;
-    let userCount = usersSnap.size;
+    let orderCount = ordersCountSnap.data().count;
+    let productCount = productsCountSnap.data().count;
+    let userCount = usersCountSnap.data().count;
     let lowStockCount = 0;
     let outOfStockCount = 0;
 
