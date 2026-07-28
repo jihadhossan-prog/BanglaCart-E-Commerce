@@ -7,13 +7,13 @@
   width: 100%;
   padding: 10px 12px;
   border-radius: 8px;
-  color: #334155;
+  color: var(--text-secondary);
   transition: background-color 0.15s ease;
   text-align: left;
 }
 
 .drawer-item:hover, .drawer-item:active {
-  background-color: #f1f5f9;
+  background-color: var(--bg-surface);
 }
 
 /* Hero Slider */
@@ -84,9 +84,9 @@
   gap: 6px;
   padding: 6px 14px;
   border-radius: 9999px;
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
-  color: #475569;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-default);
+  color: var(--text-muted);
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
@@ -95,9 +95,9 @@
 }
 
 .category-chip.active {
-  background-color: #0f766e;
-  color: #ffffff;
-  border-color: #0f766e;
+  background-color: var(--brand-primary);
+  color: var(--text-inverse);
+  border-color: var(--brand-primary);
   box-shadow: 0 2px 6px rgba(15,118,110,0.25);
 }
 
@@ -106,7 +106,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #0f766e;
+  color: var(--brand-primary);
   font-size: 13px;
   font-weight: 600;
   padding: 8px 12px;
@@ -117,8 +117,8 @@
 }
 
 .load-more-link:hover {
-  background-color: #ccfbf1;
-  color: #0d9488;
+  background-color: var(--status-info-bg);
+  color: var(--brand-primary-hover);
 }
 
 /* Chat Bubbles */
@@ -127,9 +127,9 @@
   flex-direction: column;
   height: calc(100vh - 180px);
   max-height: 650px;
-  background: white;
+  background: var(--bg-card);
   border-radius: 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border-default);
   overflow: hidden;
 }
 
@@ -145,15 +145,15 @@
 
 .chat-bubble.user {
   align-self: flex-end;
-  background-color: #0f766e;
-  color: white;
+  background-color: var(--brand-primary);
+  color: var(--text-inverse);
   border-bottom-right-radius: 2px;
 }
 
 .chat-bubble.admin {
   align-self: flex-start;
-  background-color: #f1f5f9;
-  color: #0f172a;
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
   border-bottom-left-radius: 2px;
 }
 
@@ -162,8 +162,8 @@
   position: absolute;
   top: 8px;
   left: 8px;
-  background: #ef4444;
-  color: white;
+  background: var(--discount-badge-bg);
+  color: var(--discount-badge-text);
   font-size: 10px;
   font-weight: 700;
   padding: 2px 6px;
