@@ -640,15 +640,55 @@ async function renderOrdersTab(container) {
 
   container.querySelectorAll('.pay-status-sel').forEach(sel => {
     sel.addEventListener('change', async () => {
-      await updateDoc(doc(db, 'orders', sel.dataset.id), { paymentStatus: sel.value });
+      const orderId = sel.dataset.id;
+      const newStatus = sel.value;
+      await updateDoc(doc(db, 'orders', orderId), { paymentStatus: newStatus });
       showToast('পেমেন্ট স্ট্যাটাস আপডেট করা হয়েছে', 'success');
+
+      try {
+        const orderSnap = await getDoc(doc(db, 'orders', orderId));
+        if (orderSnap.exists()) {
+          const oData = orderSnap.data();
+          if (oData.userId && oData.userId !== 'guest') {
+            await addDoc(collection(db, 'notifications'), {
+              userId: oData.userId,
+              title: `পেমেন্ট আপডেট (#${oData.orderNumber})`,
+              body: `আপনার অর্ডারের পেমেন্ট স্ট্যাটাস পরিবর্তন হয়ে "${newStatus}" হয়েছে।`,
+              createdAt: new Date().toISOString(),
+              read: false
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error creating notification on payment change:', err);
+      }
     });
   });
 
   container.querySelectorAll('.del-status-sel').forEach(sel => {
     sel.addEventListener('change', async () => {
-      await updateDoc(doc(db, 'orders', sel.dataset.id), { orderStatus: sel.value });
+      const orderId = sel.dataset.id;
+      const newStatus = sel.value;
+      await updateDoc(doc(db, 'orders', orderId), { orderStatus: newStatus });
       showToast('ডেলিভারি স্ট্যাটাস আপডেট করা হয়েছে', 'success');
+
+      try {
+        const orderSnap = await getDoc(doc(db, 'orders', orderId));
+        if (orderSnap.exists()) {
+          const oData = orderSnap.data();
+          if (oData.userId && oData.userId !== 'guest') {
+            await addDoc(collection(db, 'notifications'), {
+              userId: oData.userId,
+              title: `অর্ডার ডেলিভারি আপডেট (#${oData.orderNumber})`,
+              body: `আপনার অর্ডারের ডেলিভারি স্ট্যাটাস পরিবর্তন হয়ে "${newStatus}" হয়েছে।`,
+              createdAt: new Date().toISOString(),
+              read: false
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Error creating notification on delivery change:', err);
+      }
     });
   });
 }

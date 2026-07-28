@@ -59,18 +59,18 @@ service cloud.firestore {
     // Orders Collection
     match /orders/{orderId} {
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow create: if true;
       allow update, delete: if isAdmin();
     }
 
     // Wishlist Collection
     match /wishlist/{wishlistId} {
-      allow read, write: if isAuthenticated() && (request.auth.uid == resource.data.userId || request.auth.uid == request.resource.data.userId || isAdmin());
+      allow read, write: if isAuthenticated() && (wishlistId == request.auth.uid || isAdmin());
     }
 
     // Cart Collection
     match /cart/{cartId} {
-      allow read, write: if isAuthenticated() && (request.auth.uid == resource.data.userId || request.auth.uid == request.resource.data.userId || isAdmin());
+      allow read, write: if isAuthenticated() && (cartId == request.auth.uid || isAdmin());
     }
 
     // Reviews Collection
@@ -83,12 +83,15 @@ service cloud.firestore {
     // Notifications Collection
     match /notifications/{notificationId} {
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || resource.data.userId == 'all' || isAdmin());
-      allow write: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
     }
 
     // Chats Collection
     match /chats/{chatId} {
-      allow read, write: if isAuthenticated() && (chatId == request.auth.uid || resource.data.userId == request.auth.uid || request.resource.data.userId == request.auth.uid || isAdmin());
+      allow read: if isAuthenticated() && (chatId == request.auth.uid || resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && (chatId == request.auth.uid || request.resource.data.userId == request.auth.uid || isAdmin());
+      allow update, delete: if isAuthenticated() && (chatId == request.auth.uid || resource.data.userId == request.auth.uid || isAdmin());
     }
 
     // Messages Collection

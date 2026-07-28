@@ -3,6 +3,8 @@ import {
   collection, 
   addDoc, 
   doc, 
+  getDoc,
+  setDoc,
   getDocs, 
   query, 
   where, 
@@ -27,13 +29,52 @@ export function initCart() {
   updateCartBadge();
 }
 
-function saveCart() {
+function saveCartLocallyOnly() {
   try {
     localStorage.setItem('banglamart_cart', JSON.stringify(cart));
   } catch (e) {
     console.error('Failed to save cart:', e);
   }
+}
+
+export async function syncCartToFirestore() {
+  const user = getCurrentUser();
+  if (!user) return;
+  try {
+    const cartRef = doc(db, 'cart', user.uid);
+    await setDoc(cartRef, {
+      userId: user.uid,
+      items: cart,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Error syncing cart to Firestore:', err);
+  }
+}
+
+export async function loadCartFromFirestore() {
+  const user = getCurrentUser();
+  if (!user) return;
+  try {
+    const cartRef = doc(db, 'cart', user.uid);
+    const snap = await getDoc(cartRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      if (Array.isArray(data.items)) {
+        cart = data.items;
+        saveCartLocallyOnly();
+        updateCartBadge();
+      }
+    }
+  } catch (err) {
+    console.error('Error loading cart from Firestore:', err);
+  }
+}
+
+function saveCart() {
+  saveCartLocallyOnly();
   updateCartBadge();
+  syncCartToFirestore();
 }
 
 export function getCart() {
@@ -209,6 +250,22 @@ export async function placeOrder(orderData) {
     };
 
     const docRef = await addDoc(collection(db, 'orders'), fullOrderDoc);
+
+    // Create notification for logged in user
+    if (user && user.uid) {
+      try {
+        await addDoc(collection(db, 'notifications'), {
+          userId: user.uid,
+          title: `অর্ডার গ্রহণ করা হয়েছে (#${orderNumber})`,
+          body: `আপনার ${formatPrice(grandTotal)} টাকার অর্ডারটি সফলভাবে প্রসেসিংয়ে রাখা হয়েছে।`,
+          createdAt: new Date().toISOString(),
+          read: false
+        });
+      } catch (nErr) {
+        console.error('Error creating order notification:', nErr);
+      }
+    }
+
     clearCart();
     return { id: docRef.id, ...fullOrderDoc };
   } catch (err) {

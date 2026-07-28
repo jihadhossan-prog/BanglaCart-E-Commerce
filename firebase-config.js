@@ -26,7 +26,9 @@ import {
   startAfter, 
   onSnapshot, 
   serverTimestamp,
-  increment
+  increment,
+  arrayUnion,
+  arrayRemove
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -70,5 +72,7 @@ export {
   startAfter, 
   onSnapshot, 
   serverTimestamp,
-  increment
+  increment,
+  arrayUnion,
+  arrayRemove
 };

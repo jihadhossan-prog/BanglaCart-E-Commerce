@@ -1,4 +1,4 @@
-import { initPWA, formatPrice, showToast, escapeHtml } from './core.js';
+import { initPWA, formatPrice, formatDate, showToast, escapeHtml, getValidImageUrl } from './core.js';
 import { 
   onAuthChange, 
   loginUser, 
@@ -33,27 +33,43 @@ import {
   getGrandTotal, 
   applyCouponCode, 
   placeOrder,
-  clearCart
+  clearCart,
+  loadCartFromFirestore
 } from './cart-checkout.js';
 import { initLiveChat, sendChatMessage } from './chat.js';
-import { db, collection, query, where, getDocs, orderBy } from './firebase-config.js';
+import { db, collection, query, where, getDocs, getDoc, orderBy, onSnapshot, doc, updateDoc } from './firebase-config.js';
 
 let activeTab = 'home';
 let selectedCategory = 'সব';
 let categoriesList = [];
+let notificationUnsubscribe = null;
+let userNotifications = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
   initPWA();
   initCart();
 
   setupGlobalEventListeners();
-  onAuthChange((user, profile) => {
+  initNotificationsListener();
+
+  onAuthChange(async (user, profile) => {
     updateUserNavDisplay(user, profile);
     loadUserWishlist();
-    if (activeTab === 'chat') {
-      renderChatView();
-    } else if (activeTab === 'profile') {
-      renderProfileView();
+    initNotificationsListener();
+    if (user) {
+      await loadCartFromFirestore();
+    }
+    const main = document.getElementById('app-content');
+    if (main) {
+      if (activeTab === 'chat') {
+        renderChatView(main);
+      } else if (activeTab === 'profile') {
+        renderProfileView(main);
+      } else if (activeTab === 'notifications') {
+        renderNotificationsView(main);
+      } else if (activeTab === 'cart') {
+        renderCartView(main);
+      }
     }
   });
 
@@ -61,16 +77,63 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderView('home');
 });
 
+// Real-time Notifications Listener
+function initNotificationsListener() {
+  if (notificationUnsubscribe) {
+    notificationUnsubscribe();
+    notificationUnsubscribe = null;
+  }
+
+  const user = getCurrentUser();
+  const unreadDot = document.getElementById('unread-dot');
+
+  let q;
+  if (user) {
+    q = query(collection(db, 'notifications'), where('userId', 'in', [user.uid, 'all']));
+  } else {
+    q = query(collection(db, 'notifications'), where('userId', '==', 'all'));
+  }
+
+  notificationUnsubscribe = onSnapshot(q, (snapshot) => {
+    userNotifications = [];
+    let hasUnread = false;
+
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      const notif = { id: docSnap.id, ...data };
+      userNotifications.push(notif);
+      if (!notif.read) hasUnread = true;
+    });
+
+    // Sort in JS by createdAt descending
+    userNotifications.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+    if (unreadDot) {
+      if (hasUnread) unreadDot.classList.remove('hidden');
+      else unreadDot.classList.add('hidden');
+    }
+
+    if (activeTab === 'notifications') {
+      renderNotificationsUI(document.getElementById('app-content'));
+    }
+  }, (err) => {
+    console.error('Notifications listener error:', err);
+  });
+}
+
 // Setup Global Listeners
 function setupGlobalEventListeners() {
   // Bottom Navigation
   document.querySelectorAll('.bottom-nav-item').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const tab = btn.dataset.tab;
-      document.querySelectorAll('.bottom-nav-item').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
       renderView(tab);
     });
+  });
+
+  // Header Notification Bell
+  document.getElementById('notif-bell-btn')?.addEventListener('click', () => {
+    renderView('notifications');
   });
 
   // Drawer Toggle
@@ -89,7 +152,7 @@ function setupGlobalEventListeners() {
     item.addEventListener('click', () => {
       const navTarget = item.dataset.nav;
       drawerOverlay?.classList.remove('active');
-      if (['profile', 'orders', 'wishlist', 'chat'].includes(navTarget)) {
+      if (['profile', 'orders', 'wishlist', 'chat', 'notifications'].includes(navTarget)) {
         renderView(navTarget);
       } else {
         renderStaticInfoView(navTarget);
@@ -203,8 +266,18 @@ function updateUserNavDisplay(user, profile) {
 // Router & View Switcher
 async function renderView(tabName) {
   activeTab = tabName;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
   const main = document.getElementById('app-content');
   if (!main) return;
+
+  // Highlight active tab in bottom navigation
+  document.querySelectorAll('.bottom-nav-item').forEach(b => {
+    if (b.dataset.tab === tabName) {
+      b.classList.add('active');
+    } else {
+      b.classList.remove('active');
+    }
+  });
 
   if (tabName === 'home') {
     await renderHomeView(main);
@@ -216,9 +289,90 @@ async function renderView(tabName) {
     renderCheckoutView(main);
   } else if (tabName === 'chat') {
     renderChatView(main);
+  } else if (tabName === 'notifications') {
+    renderNotificationsView(main);
   } else if (tabName === 'profile' || tabName === 'orders') {
     renderProfileView(main, tabName === 'orders' ? 'orders' : 'info');
   }
+}
+
+// Notifications View
+function renderNotificationsView(container) {
+  renderNotificationsUI(container);
+}
+
+function renderNotificationsUI(container) {
+  if (!container) return;
+
+  const unreadCount = userNotifications.filter(n => !n.read).length;
+
+  container.innerHTML = `
+    <div class="max-w-2xl mx-auto space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+        <div class="flex items-center gap-2">
+          <h2 class="font-bold text-slate-900 text-lg sm:text-xl">নোটিফিকেশনসমূহ</h2>
+          ${unreadCount > 0 ? `<span class="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">${unreadCount} নতুন</span>` : ''}
+        </div>
+        ${unreadCount > 0 ? `<button id="mark-all-read-btn" class="text-xs font-semibold text-teal-700 hover:underline">সব পঠিত চিহ্নিত করুন</button>` : ''}
+      </div>
+
+      <div id="notifications-list-box" class="space-y-3">
+        ${userNotifications.length === 0 ? `
+          <div class="bg-white rounded-2xl p-8 text-center border border-slate-200 shadow-2xs">
+            <svg class="w-12 h-12 text-slate-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+            <p class="text-xs sm:text-sm font-medium text-slate-500">আপনার কোনো নোটিফিকেশন নেই</p>
+          </div>
+        ` : userNotifications.map(n => `
+          <div class="p-4 bg-white rounded-2xl border ${n.read ? 'border-slate-200/80 text-slate-700' : 'border-teal-400 bg-teal-50/40 text-slate-900'} shadow-2xs relative group transition">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-start gap-3">
+                <div class="p-2 rounded-xl ${n.read ? 'bg-slate-100 text-slate-500' : 'bg-teal-100 text-teal-700'} shrink-0 mt-0.5">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+                </div>
+                <div>
+                  <h4 class="font-bold text-xs sm:text-sm ${n.read ? 'text-slate-800' : 'text-teal-950'}">${escapeHtml(n.title)}</h4>
+                  <p class="text-xs text-slate-600 leading-relaxed mt-1">${escapeHtml(n.body)}</p>
+                  <span class="text-[10px] text-slate-400 block mt-2">${formatDate(n.createdAt)}</span>
+                </div>
+              </div>
+              ${!n.read ? `
+                <button class="mark-single-read-btn shrink-0 text-[10px] font-bold text-teal-700 bg-teal-100 hover:bg-teal-200 px-2.5 py-1 rounded-lg transition" data-id="${n.id}">
+                  পঠিত
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  // Mark all read listener
+  container.querySelector('#mark-all-read-btn')?.addEventListener('click', async () => {
+    for (const n of userNotifications) {
+      if (!n.read && n.id) {
+        try {
+          await updateDoc(doc(db, 'notifications', n.id), { read: true });
+        } catch (e) {
+          console.error('Mark read error:', e);
+        }
+      }
+    }
+  });
+
+  // Mark single read listener
+  container.querySelectorAll('.mark-single-read-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const notifId = btn.dataset.id;
+      if (notifId) {
+        try {
+          await updateDoc(doc(db, 'notifications', notifId), { read: true });
+        } catch (e) {
+          console.error('Mark read error:', e);
+        }
+      }
+    });
+  });
 }
 
 // Render Banner Slider (Only displays banners added from admin page)
@@ -519,10 +673,14 @@ function attachProductCardEvents() {
   });
 
   document.querySelectorAll('.wish-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const id = btn.dataset.id;
-      toggleWishlist(id);
+      await toggleWishlist(id);
+      if (activeTab === 'wishlist') {
+        const main = document.getElementById('app-content');
+        if (main) renderWishlistView(main);
+      }
     });
   });
 }
@@ -723,26 +881,45 @@ async function renderWishlistView(container) {
   }
 
   try {
-    const q = query(collection(db, 'wishlist'), where('userId', '==', user.uid));
-    const snap = await getDocs(q);
     const productIds = [];
-    snap.forEach(d => productIds.push(d.data().productId));
+    
+    const wishRef = doc(db, 'wishlist', user.uid);
+    const snap = await getDoc(wishRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      const itemsArr = data.products || data.items;
+      if (Array.isArray(itemsArr)) {
+        itemsArr.forEach(pid => {
+          if (pid && typeof pid === 'string' && !productIds.includes(pid)) {
+            productIds.push(pid);
+          }
+        });
+      }
+    }
 
     const grid = container.querySelector('#wishlist-grid');
-    grid.innerHTML = '';
+    if (grid) {
+      grid.innerHTML = '';
 
-    if (productIds.length === 0) {
-      grid.innerHTML = `<div class="col-span-2 text-center py-10 text-slate-400 text-sm">আপনার উইশলিস্টে কোনো প্রোডাক্ট নেই</div>`;
-      return;
-    }
+      if (productIds.length === 0) {
+        grid.innerHTML = `<div class="col-span-2 text-center py-10 text-slate-400 text-sm">আপনার উইশলিস্টে কোনো প্রোডাক্ট নেই</div>`;
+        return;
+      }
 
-    for (const pid of productIds) {
-      const p = await getProductById(pid);
-      if (p) grid.insertAdjacentHTML('beforeend', createProductCardHTML(p));
+      for (const pid of productIds) {
+        const p = await getProductById(pid);
+        if (p) {
+          grid.insertAdjacentHTML('beforeend', createProductCardHTML(p));
+        }
+      }
+      attachProductCardEvents();
     }
-    attachProductCardEvents();
   } catch (err) {
     console.error('Wishlist view error:', err);
+    const grid = container.querySelector('#wishlist-grid');
+    if (grid) {
+      grid.innerHTML = `<div class="col-span-2 text-center py-10 text-red-500 text-sm">উইশলিস্ট লোড করতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।</div>`;
+    }
   }
 }
 
