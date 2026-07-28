@@ -37,7 +37,9 @@ import {
   loadCartFromFirestore,
   setBuyNowItem,
   clearBuyNowItem,
-  getBuyNowItem
+  getBuyNowItem,
+  getAppliedCoupon,
+  removeCoupon
 } from './cart-checkout.js';
 import { initLiveChat, sendChatMessage } from './chat.js';
 import { db, collection, query, where, getDocs, getDoc, orderBy, onSnapshot, doc, updateDoc } from './firebase-config.js';
@@ -49,6 +51,12 @@ let notificationUnsubscribe = null;
 let userNotifications = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Load saved theme from localStorage instantly
+  const savedTheme = localStorage.getItem('theme');
+  if (savedTheme) {
+    applyAppTheme(savedTheme, false);
+  }
+
   initPWA();
   initCart();
 
@@ -61,6 +69,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     initNotificationsListener();
     if (user) {
       await loadCartFromFirestore();
+      if (profile && profile.theme) {
+        applyAppTheme(profile.theme, false);
+      }
     }
     const main = document.getElementById('app-content');
     if (main) {
@@ -72,6 +83,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderNotificationsView(main);
       } else if (activeTab === 'cart') {
         renderCartView(main);
+      } else if (activeTab === 'settings') {
+        renderSettingsView(main);
       }
     }
   });
@@ -158,7 +171,7 @@ function setupGlobalEventListeners() {
     item.addEventListener('click', () => {
       const navTarget = item.dataset.nav;
       drawerOverlay?.classList.remove('active');
-      if (['profile', 'orders', 'wishlist', 'chat', 'notifications'].includes(navTarget)) {
+      if (['profile', 'orders', 'wishlist', 'chat', 'notifications', 'settings'].includes(navTarget)) {
         renderView(navTarget);
       } else {
         renderStaticInfoView(navTarget);
@@ -302,6 +315,8 @@ async function renderView(tabName) {
     renderNotificationsView(main);
   } else if (tabName === 'profile' || tabName === 'orders') {
     renderProfileView(main, tabName === 'orders' ? 'orders' : 'info');
+  } else if (tabName === 'settings') {
+    renderSettingsView(main);
   }
 }
 
@@ -427,7 +442,7 @@ function renderBannerSlider(container, banners) {
   `).join('');
 
   const dotsHtml = banners.map((_, i) => `
-    <button class="slider-dot ${i === 0 ? 'bg-white w-5' : 'bg-white/50 w-2'} h-2 rounded-full transition-all" data-dot-index="${i}"></button>
+    <button class="slider-dot ${i === 0 ? 'bg-white' : 'bg-white/50'} transition-all" style="width: 6px; height: 6px; border-radius: 50%;" data-dot-index="${i}"></button>
   `).join('');
 
   container.innerHTML = `
@@ -466,10 +481,13 @@ function renderBannerSlider(container, banners) {
 
     dots.forEach((dot, idx) => {
       if (idx === currentIndex) {
-        dot.className = 'slider-dot bg-white w-5 h-2 rounded-full transition-all';
+        dot.className = 'slider-dot bg-white transition-all';
       } else {
-        dot.className = 'slider-dot bg-white/50 w-2 h-2 rounded-full transition-all';
+        dot.className = 'slider-dot bg-white/50 transition-all';
       }
+      dot.style.width = '6px';
+      dot.style.height = '6px';
+      dot.style.borderRadius = '50%';
     });
   }
 
@@ -1077,6 +1095,7 @@ function renderCheckoutView(container) {
   const deliveryTotal = getTotalDeliveryCharge();
   const discount = getCouponDiscount();
   const grandTotal = getGrandTotal();
+  const appliedCoupon = getAppliedCoupon();
 
   container.innerHTML = `
     <h2 class="font-bold text-slate-900 text-lg mb-4">অর্ডার চেকআউট</h2>
@@ -1154,9 +1173,28 @@ function renderCheckoutView(container) {
       </div>
 
       <!-- Final Summary Column -->
-      <div class="bg-white p-4 rounded-2xl border border-slate-200 space-y-3 h-fit">
+      <div class="bg-white p-4 rounded-2xl border border-slate-200 space-y-4 h-fit">
         <h3 class="font-bold text-slate-800 text-sm border-b pb-2 border-slate-100">পেমেন্ট হিসাব</h3>
         
+        <!-- Coupon Form Section -->
+        <div class="space-y-1.5 pb-2 border-b border-slate-100">
+          <label class="block text-xs font-semibold text-slate-700">কুপন কোড (Coupon Code)</label>
+          ${appliedCoupon ? `
+            <div class="flex items-center justify-between bg-teal-50/40 p-2 rounded-lg border border-teal-200">
+              <div class="flex flex-col">
+                <span class="text-xs font-bold text-teal-800">${escapeHtml(appliedCoupon.code)}</span>
+                <span class="text-[10px] text-teal-600 font-semibold">${appliedCoupon.type === 'percentage' ? `${appliedCoupon.value}% ছাড়` : `${formatPrice(appliedCoupon.value)} ছাড়`}</span>
+              </div>
+              <button type="button" id="remove-checkout-coupon-btn" class="text-xs font-bold text-red-500 hover:text-red-700 px-2 py-1 bg-red-50 rounded-md transition">মুছুন</button>
+            </div>
+          ` : `
+            <div class="flex gap-2">
+              <input type="text" id="checkout-coupon-input" placeholder="কুপন কোড" class="flex-1 text-xs border border-slate-300 rounded-lg px-3 py-1.5 uppercase font-semibold focus:outline-none focus:ring-2 focus:ring-teal-500" />
+              <button type="button" id="apply-checkout-coupon-btn" class="px-3 py-1.5 bg-slate-800 text-white font-semibold text-xs rounded-lg hover:bg-slate-900 transition">প্রয়োগ</button>
+            </div>
+          `}
+        </div>
+
         <div class="space-y-1.5 text-xs text-slate-600">
           <div class="flex justify-between">
             <span>প্রোডাক্ট সাবটোটাল</span>
@@ -1177,6 +1215,28 @@ function renderCheckoutView(container) {
       </div>
     </form>
   `;
+
+  // Apply checkout coupon button event
+  const applyCouponBtn = container.querySelector('#apply-checkout-coupon-btn');
+  if (applyCouponBtn) {
+    applyCouponBtn.addEventListener('click', async () => {
+      const codeInput = container.querySelector('#checkout-coupon-input');
+      const code = codeInput ? codeInput.value : '';
+      const ok = await applyCouponCode(code);
+      if (ok) {
+        renderCheckoutView(container);
+      }
+    });
+  }
+
+  // Remove checkout coupon button event
+  const removeCouponBtn = container.querySelector('#remove-checkout-coupon-btn');
+  if (removeCouponBtn) {
+    removeCouponBtn.addEventListener('click', () => {
+      removeCoupon();
+      renderCheckoutView(container);
+    });
+  }
 
   // Payment radio option highlight
   container.querySelectorAll('input[name="payment_method"]').forEach(radio => {
@@ -1418,3 +1478,77 @@ function renderStaticInfoView(type) {
 
   main.querySelector('#back-home-btn').addEventListener('click', () => renderView('home'));
 }
+
+// Dark Mode theme application function
+export async function applyAppTheme(theme, saveToFirestore = true) {
+  localStorage.setItem('theme', theme);
+  if (theme === 'dark') {
+    document.documentElement.classList.add('dark');
+    document.body.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+    document.body.classList.remove('dark');
+  }
+
+  if (saveToFirestore) {
+    const user = getCurrentUser();
+    if (user) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), { theme });
+      } catch (err) {
+        console.error('Error saving theme to Firestore:', err);
+      }
+    }
+  }
+}
+
+// Settings View Renderer
+export function renderSettingsView(container) {
+  if (!container) return;
+
+  const currentTheme = localStorage.getItem('theme') || 'light';
+  const isDark = currentTheme === 'dark';
+
+  container.innerHTML = `
+    <div class="max-w-2xl mx-auto space-y-6">
+      <div class="pb-3 border-b border-slate-200">
+        <h2 class="font-bold text-slate-900 text-lg sm:text-xl">সেটিংস (Settings)</h2>
+        <p class="text-xs text-slate-500 mt-1">আপনার একাউন্ট ও অ্যাপ্লিকেশনের সেটিংস পরিবর্তন করুন</p>
+      </div>
+
+      <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs space-y-6">
+        <!-- Theme Setting -->
+        <div class="flex items-center justify-between">
+          <div class="space-y-1 pr-4">
+            <h3 class="font-bold text-slate-800 text-sm sm:text-base">ডার্ক মোড (Dark Mode)</h3>
+            <p class="text-xs text-slate-500">অ্যাপটিকে ডার্ক থিমে ব্যবহার করতে ডার্ক মোড অন করুন। এটি আপনার চোখের আরামের জন্য চমৎকার।</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer shrink-0">
+            <input type="checkbox" id="dark-mode-toggle" class="sr-only peer" ${isDark ? 'checked' : ''}>
+            <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+          </label>
+        </div>
+      </div>
+
+      <div class="flex justify-end">
+        <button id="settings-back-home-btn" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-lg transition">হোমে ফিরে যান</button>
+      </div>
+    </div>
+  `;
+
+  // Attach Dark Mode Toggle Change Event
+  const darkModeToggle = container.querySelector('#dark-mode-toggle');
+  if (darkModeToggle) {
+    darkModeToggle.addEventListener('change', async (e) => {
+      const checked = e.target.checked;
+      const newTheme = checked ? 'dark' : 'light';
+      await applyAppTheme(newTheme);
+      showToast(newTheme === 'dark' ? 'ডার্ক মোড সক্রিয় করা হয়েছে' : 'লাইট মোড সক্রিয় করা হয়েছে', 'success');
+    });
+  }
+
+  container.querySelector('#settings-back-home-btn')?.addEventListener('click', () => {
+    renderView('home');
+  });
+}
+

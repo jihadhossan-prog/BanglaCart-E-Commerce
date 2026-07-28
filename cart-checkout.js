@@ -194,6 +194,15 @@ export function getGrandTotal() {
   return Math.max(0, subtotal + delivery - discount);
 }
 
+export function getAppliedCoupon() {
+  return appliedCoupon;
+}
+
+export function removeCoupon() {
+  appliedCoupon = null;
+  showToast('কুপনটি সরানো হয়েছে', 'info');
+}
+
 // Validate and Apply Coupon
 export async function applyCouponCode(code) {
   if (!code || code.trim() === '') {
