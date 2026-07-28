@@ -850,6 +850,7 @@ async function renderCustomersTab(container) {
               <th>ইমেইল</th>
               <th>ফোন</th>
               <th>রোল</th>
+              <th>অ্যাকশন</th>
             </tr>
           </thead>
           <tbody>
@@ -859,6 +860,9 @@ async function renderCustomersTab(container) {
                 <td>${escapeHtml(c.email || 'N/A')}</td>
                 <td>${escapeHtml(c.phone || 'N/A')}</td>
                 <td><span class="px-2 py-0.5 rounded text-xs font-bold uppercase ${c.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-700'}">${escapeHtml(c.role || 'customer')}</span></td>
+                <td>
+                  ${c.role !== 'admin' ? `<button class="delete-user-btn px-2.5 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs font-semibold transition" data-id="${c.id}">ইউজার মুছুন</button>` : '<span class="text-xs text-slate-400">অ্যাডমিন</span>'}
+                </td>
               </tr>
             `).join('')}
           </tbody>
@@ -866,6 +870,43 @@ async function renderCustomersTab(container) {
       </div>
     </div>
   `;
+
+  container.querySelectorAll('.delete-user-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const userId = btn.dataset.id;
+      if (!confirm('এই ইউজারকে মুছে ফেলা হবে, নিশ্চিত?')) return;
+
+      try {
+        const res = await fetch('/api/admin/delete-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId })
+        });
+        const resData = await res.json();
+        if (!res.ok) {
+          throw new Error(resData.error || 'Failed to delete auth user');
+        }
+
+        await deleteDoc(doc(db, 'users', userId));
+
+        try { await deleteDoc(doc(db, 'cart', userId)); } catch (e) {}
+        try { await deleteDoc(doc(db, 'wishlist', userId)); } catch (e) {}
+        try {
+          const msgSnap = await getDocs(collection(db, 'chats', userId, 'messages'));
+          for (const mDoc of msgSnap.docs) {
+            await deleteDoc(mDoc.ref);
+          }
+          await deleteDoc(doc(db, 'chats', userId));
+        } catch (e) {}
+
+        showToast('ইউজার সফলভাবে মুছে ফেলা হয়েছে', 'success');
+        renderAdminTab('customers');
+      } catch (err) {
+        console.error('Error deleting user:', err);
+        showToast('ইউজার মুছতে সমস্যা হয়েছে: ' + (err.message || ''), 'error');
+      }
+    });
+  });
 }
 
 // 7. Coupon Management Module
@@ -1044,8 +1085,27 @@ function openAdminChatThread(chatId, chatMeta, threadBox) {
       const isAdmin = msg.sender === 'admin';
 
       const b = document.createElement('div');
-      b.className = `p-2 rounded-xl text-xs max-w-[80%] ${isAdmin ? 'bg-teal-700 text-white ml-auto' : 'bg-white text-slate-800 border border-slate-200'}`;
-      b.textContent = msg.text;
+      b.className = `p-2 rounded-xl text-xs max-w-[80%] relative group ${isAdmin ? 'bg-teal-700 text-white ml-auto' : 'bg-white text-slate-800 border border-slate-200'}`;
+      b.innerHTML = `
+        <div>${escapeHtml(msg.text || '')}</div>
+        <div class="flex items-center justify-between text-[10px] opacity-70 mt-1 gap-2">
+          <button class="admin-del-msg text-rose-300 hover:text-white underline cursor-pointer" data-id="${docSnap.id}">মুছুন</button>
+          <span>${msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+        </div>
+      `;
+
+      b.querySelector('.admin-del-msg')?.addEventListener('click', async () => {
+        if (confirm('অ্যাডমিন হিসেবে এই মেসেজটি মুছে ফেলতে চান?')) {
+          try {
+            await deleteDoc(doc(db, 'chats', chatId, 'messages', docSnap.id));
+            showToast('মেসেজ মুছে ফেলা হয়েছে', 'success');
+          } catch (err) {
+            console.error('Error deleting message as admin:', err);
+            showToast('মেসেজ মোছা যায়নি', 'error');
+          }
+        }
+      });
+
       msgBox.appendChild(b);
     });
     msgBox.scrollTop = msgBox.scrollHeight;

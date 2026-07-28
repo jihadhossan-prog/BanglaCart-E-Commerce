@@ -8,7 +8,8 @@ import {
   query, 
   orderBy, 
   serverTimestamp,
-  updateDoc
+  updateDoc,
+  deleteDoc
 } from './firebase-config.js';
 import { formatDate, showToast, escapeHtml } from './core.js';
 import { getCurrentUser, getUserProfile } from './auth.js';
@@ -65,9 +66,10 @@ export function initLiveChat(chatContainer, statusBadge) {
       snapshot.forEach(docSnap => {
         const msg = docSnap.data();
         const isUser = msg.sender === 'user';
+        const canDelete = isUser && (msg.senderId === user.uid || !msg.senderId);
         
         const bubble = document.createElement('div');
-        bubble.className = `chat-bubble ${isUser ? 'user' : 'admin'} mb-2 shadow-2xs`;
+        bubble.className = `chat-bubble ${isUser ? 'user' : 'admin'} mb-2 shadow-2xs relative group`;
         
         let contentHtml = escapeHtml(msg.text || '');
         if (msg.imageUrl) {
@@ -76,8 +78,23 @@ export function initLiveChat(chatContainer, statusBadge) {
 
         bubble.innerHTML = `
           <div>${contentHtml}</div>
-          <div class="text-[10px] opacity-70 text-right mt-1">${formatDate(msg.timestamp)}</div>
+          <div class="flex items-center justify-between text-[10px] opacity-70 mt-1 gap-2">
+            ${canDelete ? `<button class="delete-msg-btn text-rose-200 hover:text-white underline cursor-pointer" data-id="${docSnap.id}">মুছুন</button>` : '<span></span>'}
+            <span>${formatDate(msg.timestamp)}</span>
+          </div>
         `;
+
+        bubble.querySelector('.delete-msg-btn')?.addEventListener('click', async () => {
+          if (confirm('এই মেসেজটি মুছে ফেলতে চান?')) {
+            try {
+              await deleteDoc(doc(db, 'chats', chatId, 'messages', docSnap.id));
+              showToast('মেসেজ মুছে ফেলা হয়েছে', 'success');
+            } catch (err) {
+              console.error('Error deleting message:', err);
+              showToast('মেসেজ মোছা যায়নি', 'error');
+            }
+          }
+        });
 
         chatContainer.appendChild(bubble);
       });
@@ -102,6 +119,7 @@ export async function sendChatMessage(text, imageUrl = '') {
   try {
     await addDoc(messagesRef, {
       sender: 'user',
+      senderId: user.uid,
       text: text.trim(),
       imageUrl: imageUrl,
       timestamp: new Date().toISOString()
