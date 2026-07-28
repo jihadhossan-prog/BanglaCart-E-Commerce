@@ -87,12 +87,15 @@ function initNotificationsListener() {
   const user = getCurrentUser();
   const unreadDot = document.getElementById('unread-dot');
 
-  let q;
-  if (user) {
-    q = query(collection(db, 'notifications'), where('userId', 'in', [user.uid, 'all']));
-  } else {
-    q = query(collection(db, 'notifications'), where('userId', '==', 'all'));
+  if (!user) {
+    userNotifications = [];
+    if (unreadDot) {
+      unreadDot.classList.add('hidden');
+    }
+    return;
   }
+
+  const q = query(collection(db, 'notifications'), where('userId', 'in', [user.uid, 'all']));
 
   notificationUnsubscribe = onSnapshot(q, (snapshot) => {
     userNotifications = [];
