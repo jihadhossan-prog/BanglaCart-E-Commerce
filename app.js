@@ -3,6 +3,7 @@ import {
   onAuthChange, 
   loginUser, 
   registerUser, 
+  loginWithGoogle,
   logoutUser, 
   resetPassword, 
   getCurrentUser, 
@@ -235,11 +236,22 @@ function setupGlobalEventListeners() {
     } catch (err) {}
   });
 
-  document.getElementById('forgot-password-btn')?.addEventListener('click', async () => {
-    const email = prompt('আপনার নিবন্ধিত ইমেইল এড্রেস লিখুন:');
-    if (email) {
-      await resetPassword(email);
-    }
+  document.getElementById('google-login-btn')?.addEventListener('click', async () => {
+    try {
+      const user = await loginWithGoogle();
+      if (user) {
+        document.getElementById('auth-modal')?.classList.add('hidden');
+      }
+    } catch (err) {}
+  });
+
+  document.getElementById('google-register-btn')?.addEventListener('click', async () => {
+    try {
+      const user = await loginWithGoogle();
+      if (user) {
+        document.getElementById('auth-modal')?.classList.add('hidden');
+      }
+    } catch (err) {}
   });
 
   // Search input live filter

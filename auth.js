@@ -6,6 +6,8 @@ import {
   signOut, 
   onAuthStateChanged, 
   sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup,
   doc, 
   getDoc, 
   setDoc, 
@@ -74,6 +76,43 @@ export async function loginUser(email, password) {
     let msg = 'লগইন করতে ব্যর্থ হয়েছে';
     if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
       msg = 'ইমেইল বা পাসওয়ার্ড সঠিক নয়';
+    }
+    showToast(msg, 'error');
+    throw error;
+  }
+}
+
+export async function loginWithGoogle() {
+  try {
+    const provider = new GoogleAuthProvider();
+    const result = await signInWithPopup(auth, provider);
+    const user = result.user;
+
+    const userRef = doc(db, 'users', user.uid);
+    const docSnap = await getDoc(userRef);
+
+    if (!docSnap.exists()) {
+      const userData = {
+        uid: user.uid,
+        email: user.email || '',
+        fullName: user.displayName || 'গ্রাহক',
+        phone: '',
+        role: 'customer',
+        addresses: [],
+        createdAt: new Date().toISOString()
+      };
+      await setDoc(userRef, userData);
+    }
+
+    showToast('গুগল দিয়ে সফলভাবে লগইন করা হয়েছে', 'success');
+    return user;
+  } catch (error) {
+    console.error("Google login error:", error);
+    let msg = 'গুগল লগইন করতে ব্যর্থ হয়েছে';
+    if (error.code === 'auth/account-exists-with-different-credential') {
+      msg = 'এই ইমেইল দিয়ে আগে থেকেই একটি অ্যাকাউন্ট আছে, দয়া করে Email/Password দিয়ে লগইন করুন';
+    } else if (error.code === 'auth/popup-closed-by-user') {
+      return;
     }
     showToast(msg, 'error');
     throw error;
