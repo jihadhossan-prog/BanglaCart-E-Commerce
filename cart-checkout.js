@@ -15,6 +15,30 @@ import { getCurrentUser } from './auth.js';
 
 let cart = [];
 let appliedCoupon = null;
+let buyNowItem = null;
+
+export function setBuyNowItem(product, qty = 1) {
+  const currentPrice = product.discountPrice ? Number(product.discountPrice) : Number(product.price);
+  const deliveryCharge = Number(product.deliveryCharge) || 0;
+  buyNowItem = {
+    id: product.id,
+    name: product.name,
+    price: currentPrice,
+    originalPrice: Number(product.price),
+    image: Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : (product.image || ''),
+    deliveryCharge: deliveryCharge,
+    sku: product.sku || '',
+    qty: qty
+  };
+}
+
+export function clearBuyNowItem() {
+  buyNowItem = null;
+}
+
+export function getBuyNowItem() {
+  return buyNowItem;
+}
 
 // Initialize Cart from LocalStorage
 export function initCart() {
@@ -140,10 +164,16 @@ export function clearCart() {
 }
 
 export function getSubtotal() {
+  if (buyNowItem) {
+    return buyNowItem.price * buyNowItem.qty;
+  }
   return cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
 }
 
 export function getTotalDeliveryCharge() {
+  if (buyNowItem) {
+    return buyNowItem.deliveryCharge;
+  }
   // Sum of individual product delivery charges
   return calculateTotalDeliveryCharge(cart);
 }
@@ -212,7 +242,8 @@ export async function applyCouponCode(code) {
 // Create Order in Firestore
 export async function placeOrder(orderData) {
   const user = getCurrentUser();
-  if (cart.length === 0) {
+  const itemsToCheckout = buyNowItem ? [buyNowItem] : cart;
+  if (itemsToCheckout.length === 0) {
     showToast('আপনার কার্ট খালি!', 'error');
     return null;
   }
@@ -241,7 +272,7 @@ export async function placeOrder(orderData) {
       paymentStatus: orderData.paymentMethod === 'COD' ? 'Unpaid' : 'Pending Verification',
       trxId: orderData.trxId || '',
       orderStatus: 'Processing',
-      items: cart,
+      items: itemsToCheckout,
       subtotal,
       deliveryChargeTotal: deliveryTotal,
       couponDiscount: discount,
@@ -266,7 +297,11 @@ export async function placeOrder(orderData) {
       }
     }
 
-    clearCart();
+    if (buyNowItem) {
+      clearBuyNowItem();
+    } else {
+      clearCart();
+    }
     return { id: docRef.id, ...fullOrderDoc };
   } catch (err) {
     console.error('Error placing order:', err);

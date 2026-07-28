@@ -34,7 +34,10 @@ import {
   applyCouponCode, 
   placeOrder,
   clearCart,
-  loadCartFromFirestore
+  loadCartFromFirestore,
+  setBuyNowItem,
+  clearBuyNowItem,
+  getBuyNowItem
 } from './cart-checkout.js';
 import { initLiveChat, sendChatMessage } from './chat.js';
 import { db, collection, query, where, getDocs, getDoc, orderBy, onSnapshot, doc, updateDoc } from './firebase-config.js';
@@ -269,6 +272,9 @@ function updateUserNavDisplay(user, profile) {
 // Router & View Switcher
 async function renderView(tabName) {
   activeTab = tabName;
+  if (tabName !== 'checkout') {
+    clearBuyNowItem();
+  }
   window.scrollTo({ top: 0, behavior: 'smooth' });
   const main = document.getElementById('app-content');
   if (!main) return;
@@ -675,6 +681,18 @@ function attachProductCardEvents() {
     });
   });
 
+  document.querySelectorAll('.buy-now-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.id;
+      const product = await getProductById(id);
+      if (product) {
+        setBuyNowItem(product, 1);
+        renderView('checkout');
+      }
+    });
+  });
+
   document.querySelectorAll('.wish-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -843,7 +861,7 @@ async function showProductDetailsModal(productId) {
   });
 
   modal.querySelector('#modal-buy-now').addEventListener('click', () => {
-    addToCart(product, qty);
+    setBuyNowItem(product, qty);
     modal.remove();
     renderView('checkout');
   });
@@ -1079,7 +1097,7 @@ function renderCheckoutView(container) {
           </div>
         </div>
 
-        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div>
             <label class="block text-xs font-semibold text-slate-700 mb-1">বিভাগ *</label>
             <input type="text" id="ship-division" required placeholder="ঢাকা" class="w-full text-xs p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none" />
@@ -1091,6 +1109,10 @@ function renderCheckoutView(container) {
           <div>
             <label class="block text-xs font-semibold text-slate-700 mb-1">উপজেলা/থানা *</label>
             <input type="text" id="ship-upazila" required placeholder="ধানমন্ডি" class="w-full text-xs p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">এলাকা/গ্রাম *</label>
+            <input type="text" id="ship-area" required placeholder="যেমন: ধানমন্ডি ১৫" class="w-full text-xs p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none" />
           </div>
         </div>
 
@@ -1188,7 +1210,7 @@ function renderCheckoutView(container) {
       division: container.querySelector('#ship-division').value,
       district: container.querySelector('#ship-district').value,
       upazila: container.querySelector('#ship-upazila').value,
-      area: '',
+      area: container.querySelector('#ship-area').value,
       address: container.querySelector('#ship-address').value,
       note: container.querySelector('#ship-note').value,
       paymentMethod: payMethod,

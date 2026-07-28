@@ -186,10 +186,16 @@ export function createProductCardHTML(p) {
             ${originalPrice ? `<span class="text-xs text-slate-400 line-through">${formatPrice(originalPrice)}</span>` : ''}
           </div>
 
-          <button class="add-to-cart-btn w-full mt-2 py-1.5 bg-teal-50 hover:bg-teal-700 hover:text-white text-teal-700 font-semibold text-xs rounded-lg transition flex items-center justify-center gap-1" data-id="${p.id}">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
-            <span>কার্টে রাখুন</span>
-          </button>
+          <div class="grid grid-cols-2 gap-2 mt-2">
+            <button class="add-to-cart-btn py-1.5 border border-teal-600 bg-white hover:bg-teal-50 text-teal-700 font-semibold text-xs rounded-lg transition flex items-center justify-center gap-1" data-id="${p.id}">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
+              <span>কার্টে রাখুন</span>
+            </button>
+            <button class="buy-now-btn py-1.5 bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs rounded-lg transition flex items-center justify-center gap-1" data-id="${p.id}">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              <span>এখনই কিনুন</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
