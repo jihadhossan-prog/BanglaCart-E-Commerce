@@ -1346,7 +1346,7 @@ function renderChatView(container) {
 }
 
 // Profile & Orders View
-async function renderProfileView(container, subView = 'info') {
+async function renderProfileView(container) {
   const user = getCurrentUser();
   const profile = getUserProfile();
 
@@ -1364,98 +1364,84 @@ async function renderProfileView(container, subView = 'info') {
   }
 
   container.innerHTML = `
-    <div class="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 shadow-2xs">
-      <div class="flex items-center gap-3 pb-4 border-b border-slate-100">
-        <div class="w-12 h-12 rounded-full bg-teal-700 text-white font-bold text-lg flex items-center justify-center">
+    <div class="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200 shadow-2xs space-y-4">
+      <div class="flex items-center gap-3 pb-3 border-b border-slate-100">
+        <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-teal-700 text-white font-bold text-base sm:text-lg flex items-center justify-center">
           ${(profile?.fullName || 'G')[0].toUpperCase()}
         </div>
         <div>
-          <h3 class="font-bold text-slate-900 text-base">${escapeHtml(profile?.fullName || 'গ্রাহক')}</h3>
-          <p class="text-xs text-slate-500">${escapeHtml(user.email)}</p>
+          <h3 class="font-bold text-slate-900 text-sm sm:text-base">${escapeHtml(profile?.fullName || 'গ্রাহক')}</h3>
+          <p class="text-2xs sm:text-xs text-slate-500">${escapeHtml(user.email)}</p>
         </div>
       </div>
 
-      <!-- Sub tabs -->
-      <div class="flex border-b border-slate-200 my-4">
-        <button id="prof-tab-info" class="py-2 px-4 font-semibold text-xs ${subView === 'info' ? 'text-teal-700 border-b-2 border-teal-700' : 'text-slate-500'}">তথ্য ও ঠিকানা</button>
-        <button id="prof-tab-orders" class="py-2 px-4 font-semibold text-xs ${subView === 'orders' ? 'text-teal-700 border-b-2 border-teal-700' : 'text-slate-500'}">অর্ডার হিস্ট্রি</button>
-      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <!-- LEFT column: Order History -->
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col">
+          <h4 class="font-bold text-slate-800 text-xs sm:text-sm mb-2 pb-1 border-b border-slate-200">অর্ডার হিস্ট্রি</h4>
+          <div id="profile-orders-list" class="flex-1 max-h-80 overflow-y-auto space-y-2 pr-1 text-xs text-slate-600">
+            লোড হচ্ছে...
+          </div>
+        </div>
 
-      <div id="profile-subcontent"></div>
+        <!-- RIGHT column: Info & Address -->
+        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col">
+          <h4 class="font-bold text-slate-800 text-xs sm:text-sm mb-2 pb-1 border-b border-slate-200">তথ্য ও ঠিকানা</h4>
+          <form id="address-update-form" class="space-y-2.5 flex-1 max-h-80 overflow-y-auto pr-1">
+            <div>
+              <label class="block text-2xs sm:text-xs text-slate-600 mb-1">ফোন নম্বর</label>
+              <input type="tel" id="prof-phone" value="${escapeHtml(profile?.phone || '')}" class="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white" />
+            </div>
+            <div>
+              <label class="block text-2xs sm:text-xs text-slate-600 mb-1">ঠিকানা</label>
+              <textarea id="prof-addr" class="w-full text-xs p-2 border border-slate-300 rounded-lg bg-white" rows="3">${escapeHtml(profile?.defaultAddress?.address || '')}</textarea>
+            </div>
+            <button type="submit" class="w-full py-2 bg-slate-800 text-white font-semibold text-xs rounded-lg hover:bg-slate-900 transition">সেভ করুন</button>
+          </form>
+        </div>
+      </div>
     </div>
   `;
 
-  container.querySelector('#prof-tab-info').addEventListener('click', () => renderProfileSubContent('info'));
-  container.querySelector('#prof-tab-orders').addEventListener('click', () => renderProfileSubContent('orders'));
+  container.querySelector('#address-update-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const phone = container.querySelector('#prof-phone').value;
+    const addr = container.querySelector('#prof-addr').value;
+    await updateUserAddress({ phone, address: addr });
+  });
 
-  renderProfileSubContent(subView);
-}
+  // Load orders into LEFT column
+  const ordersBox = container.querySelector('#profile-orders-list');
+  try {
+    const q = query(collection(db, 'orders'), where('userId', '==', user.uid));
+    const snap = await getDocs(q);
+    const orders = [];
+    snap.forEach(d => orders.push({ id: d.id, ...d.data() }));
 
-async function renderProfileSubContent(type) {
-  const box = document.getElementById('profile-subcontent');
-  if (!box) return;
-
-  const profile = getUserProfile();
-  const user = getCurrentUser();
-
-  if (type === 'info') {
-    box.innerHTML = `
-      <form id="address-update-form" class="space-y-3 max-w-md">
-        <h4 class="font-bold text-slate-800 text-xs">ডিফল্ট ঠিকানা সেট করুন</h4>
-        <div>
-          <label class="block text-xs text-slate-600 mb-1">ফোন নম্বর</label>
-          <input type="tel" id="prof-phone" value="${escapeHtml(profile?.phone || '')}" class="w-full text-xs p-2 border border-slate-300 rounded-lg" />
-        </div>
-        <div>
-          <label class="block text-xs text-slate-600 mb-1">ঠিকানা</label>
-          <textarea id="prof-addr" class="w-full text-xs p-2 border border-slate-300 rounded-lg" rows="2">${escapeHtml(profile?.defaultAddress?.address || '')}</textarea>
-        </div>
-        <button type="submit" class="px-4 py-2 bg-slate-800 text-white font-semibold text-xs rounded-lg hover:bg-slate-900">সেভ করুন</button>
-      </form>
-    `;
-
-    box.querySelector('#address-update-form')?.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const phone = box.querySelector('#prof-phone').value;
-      const addr = box.querySelector('#prof-addr').value;
-      await updateUserAddress({ phone, address: addr });
-    });
-  } else if (type === 'orders') {
-    box.innerHTML = `<p class="text-xs text-slate-400">অর্ডার হিস্ট্রি লোড হচ্ছে...</p>`;
-    try {
-      const q = query(collection(db, 'orders'), where('userId', '==', user.uid));
-      const snap = await getDocs(q);
-      const orders = [];
-      snap.forEach(d => orders.push({ id: d.id, ...d.data() }));
-
-      if (orders.length === 0) {
-        box.innerHTML = `<p class="text-xs text-slate-400 py-4 text-center">আপনি এখনো কোনো অর্ডার করেননি</p>`;
-        return;
-      }
-
-      box.innerHTML = `
-        <div class="space-y-3">
-          ${orders.map(o => `
-            <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
-              <div class="flex justify-between font-bold text-slate-800">
-                <span>অর্ডার #${escapeHtml(o.orderNumber)}</span>
-                <span class="text-teal-700">${escapeHtml(o.orderStatus)}</span>
-              </div>
-              <div class="flex justify-between text-slate-500">
-                <span>মূল্য: ${formatPrice(o.grandTotal)}</span>
-                <span>পেমেন্ট: ${escapeHtml(o.paymentStatus)}</span>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      `;
-    } catch (err) {
-      console.error('Error loading orders:', err);
+    if (orders.length === 0) {
+      ordersBox.innerHTML = `<p class="text-xs text-slate-400 py-6 text-center">আপনি এখনো কোনো অর্ডার করেননি</p>`;
+      return;
     }
+
+    ordersBox.innerHTML = orders.map(o => `
+      <div class="p-2.5 bg-white rounded-lg border border-slate-200 text-xs space-y-1 shadow-2xs">
+        <div class="flex justify-between font-bold text-slate-800">
+          <span>#${escapeHtml(o.orderNumber || o.id.slice(0,6))}</span>
+          <span class="text-teal-700">${escapeHtml(o.orderStatus || 'Pending')}</span>
+        </div>
+        <div class="flex justify-between text-slate-500 text-2xs sm:text-xs">
+          <span>মূল্য: ${formatPrice(o.grandTotal)}</span>
+          <span>পেমেন্ট: ${escapeHtml(o.paymentStatus || o.paymentMethod)}</span>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    console.error('Error loading orders:', err);
+    ordersBox.innerHTML = `<p class="text-xs text-red-400">অর্ডার লোড করতে সমস্যা হয়েছে</p>`;
   }
 }
 
-function renderStaticInfoView(type) {
+async function renderStaticInfoView(type) {
   const main = document.getElementById('app-content');
   if (!main) return;
 
@@ -1466,17 +1452,46 @@ function renderStaticInfoView(type) {
     about: 'আমাদের সম্পর্কে'
   };
 
+  const fieldMap = {
+    help: 'helpCenterContent',
+    contact: 'contactUsContent',
+    about: 'aboutContent'
+  };
+
   main.innerHTML = `
-    <div class="bg-white rounded-2xl p-6 border border-slate-200 max-w-2xl mx-auto space-y-3">
+    <div class="bg-white rounded-2xl p-6 border border-slate-200 max-w-2xl mx-auto space-y-4 shadow-2xs">
       <h2 class="font-bold text-slate-900 text-lg">${titles[type] || 'তথ্য'}</h2>
-      <p class="text-xs sm:text-sm text-slate-600 leading-relaxed">
-        বাংলামার্টে কেনাকাটা করার জন্য ধন্যবাদ। কাস্টমার সার্ভিসের জন্য সরাসরি আমাদের লাইভ চ্যাট মেসেজ করুন অথবা কল করুন: 01700000000।
-      </p>
-      <button id="back-home-btn" class="px-4 py-2 bg-teal-700 text-white font-semibold text-xs rounded-lg">হোমে ফিরে যান</button>
+      <div id="static-content-body" class="text-xs sm:text-sm text-slate-600 leading-relaxed whitespace-pre-line">
+        লোড হচ্ছে...
+      </div>
+      <button id="back-home-btn" class="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs rounded-lg transition">হোমে ফিরে যান</button>
     </div>
   `;
 
   main.querySelector('#back-home-btn').addEventListener('click', () => renderView('home'));
+
+  const contentBox = main.querySelector('#static-content-body');
+  if (fieldMap[type]) {
+    try {
+      const docRef = doc(db, 'settings', 'pageContents');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const val = docSnap.data()[fieldMap[type]];
+        if (val && val.trim().length > 0) {
+          contentBox.textContent = val;
+        } else {
+          contentBox.textContent = 'এই পেজের তথ্য শীঘ্রই যুক্ত করা হবে';
+        }
+      } else {
+        contentBox.textContent = 'এই পেজের তথ্য শীঘ্রই যুক্ত করা হবে';
+      }
+    } catch (err) {
+      console.error('Error fetching static content:', err);
+      contentBox.textContent = 'এই পেজের তথ্য শীঘ্রই যুক্ত করা হবে';
+    }
+  } else {
+    contentBox.textContent = 'এই পেজের তথ্য শীঘ্রই যুক্ত করা হবে';
+  }
 }
 
 // Dark Mode theme application function

@@ -97,6 +97,8 @@ async function renderAdminTab(tab) {
     renderAdminChatTab(main);
   } else if (tab === 'notifications') {
     renderNotificationsTab(main);
+  } else if (tab === 'content') {
+    await renderContentTab(main);
   }
 }
 
@@ -1086,3 +1088,71 @@ function renderNotificationsTab(container) {
     container.querySelector('#send-notif-form').reset();
   });
 }
+
+// 11. Page Content Management Module
+async function renderContentTab(container) {
+  container.innerHTML = `<div class="p-4 text-slate-500 text-xs">পেজ কন্টেন্ট লোড হচ্ছে...</div>`;
+  try {
+    const docRef = doc(db, 'settings', 'pageContents');
+    const docSnap = await getDoc(docRef);
+    const data = docSnap.exists() ? docSnap.data() : {};
+
+    container.innerHTML = `
+      <div class="space-y-6 max-w-4xl">
+        <div class="pb-3 border-b border-slate-200">
+          <h2 class="text-xl font-bold text-slate-800">পেজ কন্টেন্ট ম্যানেজমেন্ট (Page Content)</h2>
+          <p class="text-xs text-slate-500 mt-1">হেল্প সেন্টার, যোগাযোগ এবং আমাদের সম্পর্কে পেজের কন্টেন্ট পরিবর্তন করুন</p>
+        </div>
+
+        <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-2xs space-y-6">
+          <!-- Help Center -->
+          <div class="space-y-2">
+            <label class="block text-xs font-bold text-slate-700">হেল্প সেন্টার কন্টেন্ট (Help Center)</label>
+            <textarea id="help-content-input" rows="5" class="w-full text-xs p-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500" placeholder="হেল্প সেন্টার সম্পর্কিত তথ্য লিখুন...">${escapeHtml(data.helpCenterContent || '')}</textarea>
+          </div>
+
+          <!-- Contact Us -->
+          <div class="space-y-2">
+            <label class="block text-xs font-bold text-slate-700">যোগাযোগ কন্টেন্ট (Contact Us)</label>
+            <textarea id="contact-content-input" rows="5" class="w-full text-xs p-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500" placeholder="যোগাযোগ সম্পর্কিত তথ্য লিখুন...">${escapeHtml(data.contactUsContent || '')}</textarea>
+          </div>
+
+          <!-- About Us -->
+          <div class="space-y-2">
+            <label class="block text-xs font-bold text-slate-700">আমাদের সম্পর্কে কন্টেন্ট (About Us)</label>
+            <textarea id="about-content-input" rows="5" class="w-full text-xs p-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500" placeholder="আমাদের সম্পর্কে তথ্য লিখুন...">${escapeHtml(data.aboutContent || '')}</textarea>
+          </div>
+
+          <div class="flex justify-end pt-2">
+            <button id="save-pages-btn" class="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs rounded-xl shadow-sm transition">সব পেজ কন্টেন্ট সেভ করুন</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    container.querySelector('#save-pages-btn').addEventListener('click', async () => {
+      const helpCenterContent = container.querySelector('#help-content-input').value.trim();
+      const contactUsContent = container.querySelector('#contact-content-input').value.trim();
+      const aboutContent = container.querySelector('#about-content-input').value.trim();
+
+      try {
+        await setDoc(doc(db, 'settings', 'pageContents'), {
+          helpCenterContent,
+          contactUsContent,
+          aboutContent,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+
+        showToast('সকল পেজের কন্টেন্ট সফলভাবে সেভ করা হয়েছে!', 'success');
+      } catch (err) {
+        console.error('Error saving page contents:', err);
+        showToast('কন্টেন্ট সেভ করতে সমস্যা হয়েছে', 'error');
+      }
+    });
+
+  } catch (err) {
+    console.error('Error loading page contents:', err);
+    container.innerHTML = `<p class="text-xs text-red-500">কন্টেন্ট লোড করতে সমস্যা হয়েছে।</p>`;
+  }
+}
+
