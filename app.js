@@ -409,10 +409,28 @@ function renderBannerSlider(container, banners) {
 
   container.classList.remove('hidden');
 
+  function handleBannerClick(b) {
+    if (b && b.linkedCategoryId) {
+      selectedCategory = b.linkedCategoryId;
+      const chipsContainer = document.getElementById('category-chips-container');
+      if (chipsContainer) {
+        chipsContainer.querySelectorAll('.category-chip').forEach(c => {
+          if (c.dataset.cat === b.linkedCategoryId) {
+            c.classList.add('active');
+          } else {
+            c.classList.remove('active');
+          }
+        });
+      }
+      renderCategoryProductGrids(b.linkedCategoryId);
+      window.scrollTo({ top: 400, behavior: 'smooth' });
+    }
+  }
+
   if (banners.length === 1) {
     const b = banners[0];
     container.innerHTML = `
-      <div class="hero-slider-container">
+      <div class="hero-slider-container ${b.linkedCategoryId ? 'cursor-pointer' : ''}" id="single-banner-click">
         <div class="hero-slide" style="background-image: url('${escapeHtml(b.imageUrl)}')">
           <div class="hero-overlay"></div>
           <div class="relative z-10 text-white max-w-lg">
@@ -422,6 +440,9 @@ function renderBannerSlider(container, banners) {
         </div>
       </div>
     `;
+    if (b.linkedCategoryId) {
+      container.querySelector('#single-banner-click')?.addEventListener('click', () => handleBannerClick(b));
+    }
     return;
   }
 
@@ -430,7 +451,7 @@ function renderBannerSlider(container, banners) {
   let autoSlideTimer = null;
 
   const slidesHtml = banners.map((b, i) => `
-    <div class="hero-slide-item transition-opacity duration-500 absolute inset-0 ${i === 0 ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'}" data-slide-index="${i}">
+    <div class="hero-slide-item transition-opacity duration-500 absolute inset-0 ${i === 0 ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'} ${b.linkedCategoryId ? 'cursor-pointer' : ''}" data-slide-index="${i}" data-cat-link="${escapeHtml(b.linkedCategoryId || '')}">
       <div class="hero-slide h-full" style="background-image: url('${escapeHtml(b.imageUrl)}')">
         <div class="hero-overlay"></div>
         <div class="relative z-10 text-white max-w-lg">
@@ -502,20 +523,32 @@ function renderBannerSlider(container, banners) {
     if (autoSlideTimer) clearInterval(autoSlideTimer);
   }
 
-  container.querySelector('#slider-prev-btn')?.addEventListener('click', () => {
+  container.querySelector('#slider-prev-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
     goToSlide(currentIndex - 1);
     startTimer();
   });
 
-  container.querySelector('#slider-next-btn')?.addEventListener('click', () => {
+  container.querySelector('#slider-next-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
     goToSlide(currentIndex + 1);
     startTimer();
   });
 
   container.querySelectorAll('.slider-dot').forEach((dot, idx) => {
-    dot.addEventListener('click', () => {
+    dot.addEventListener('click', (e) => {
+      e.stopPropagation();
       goToSlide(idx);
       startTimer();
+    });
+  });
+
+  container.querySelectorAll('.hero-slide-item').forEach((item, idx) => {
+    item.addEventListener('click', () => {
+      const banner = banners[idx];
+      if (banner && banner.linkedCategoryId) {
+        handleBannerClick(banner);
+      }
     });
   });
 

@@ -480,6 +480,7 @@ async function renderBannersTab(container) {
                 <div>
                   <h4 class="font-bold text-slate-800 text-xs">${escapeHtml(b.title || 'শিরোনাম নেই')}</h4>
                   <p class="text-[11px] text-slate-500 mt-0.5 line-clamp-1">${escapeHtml(b.subtitle || 'উপ-শিরোনাম নেই')}</p>
+                  ${b.linkedCategoryId ? `<span class="inline-block mt-1 px-2 py-0.5 bg-teal-50 text-teal-700 font-semibold text-[10px] rounded">ক্যাটাগরি লিঙ্কড</span>` : ''}
                 </div>
                 <div class="flex items-center gap-1">
                   <button class="edit-banner-btn px-2 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-md text-xs font-semibold" data-id="${b.id}">এডিট</button>
@@ -493,14 +494,14 @@ async function renderBannersTab(container) {
     </div>
   `;
 
-  container.querySelector('#add-banner-btn')?.addEventListener('click', () => {
-    showBannerFormModal();
+  container.querySelector('#add-banner-btn')?.addEventListener('click', async () => {
+    await showBannerFormModal();
   });
 
   container.querySelectorAll('.edit-banner-btn').forEach(b => {
-    b.addEventListener('click', () => {
+    b.addEventListener('click', async () => {
       const bannerObj = banners.find(x => x.id === b.dataset.id);
-      showBannerFormModal(bannerObj);
+      await showBannerFormModal(bannerObj);
     });
   });
 
@@ -515,7 +516,15 @@ async function renderBannersTab(container) {
   });
 }
 
-function showBannerFormModal(banner = null) {
+async function showBannerFormModal(banner = null) {
+  let categories = [];
+  try {
+    const catSnap = await getDocs(collection(db, 'categories'));
+    catSnap.forEach(d => categories.push({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.error('Error fetching categories for banner modal:', err);
+  }
+
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4';
 
@@ -539,6 +548,17 @@ function showBannerFormModal(banner = null) {
           <input type="text" id="b-subtitle" value="${escapeHtml(banner?.subtitle || '')}" class="w-full p-2 border border-slate-300 rounded-lg" placeholder="যেমন: সব প্রোডাক্টে ৩০% ছাড়..." />
         </div>
 
+        <div>
+          <label class="block font-semibold mb-1">ক্যাটাগরি (Category Link)</label>
+          <select id="b-category" class="w-full p-2 border border-slate-300 rounded-lg bg-white">
+            <option value="">কোনোটি না (None)</option>
+            ${categories.map(c => `
+              <option value="${escapeHtml(c.name)}" ${banner?.linkedCategoryId === c.name ? 'selected' : ''}>${escapeHtml(c.name)}</option>
+            `).join('')}
+          </select>
+          <p class="text-[10px] text-slate-400 mt-1">এই ব্যনারে ক্লিক করলে ব্যবহারকারী নির্দিষ্ট ক্যাটাগরিতে চলে যাবে।</p>
+        </div>
+
         <div class="flex justify-end gap-2 pt-2">
           <button type="button" id="close-banner-modal-btn" class="px-4 py-2 bg-slate-200 text-slate-700 font-semibold rounded-lg">বাতিল</button>
           <button type="submit" class="px-4 py-2 bg-teal-700 text-white font-semibold rounded-lg hover:bg-teal-800">সংরক্ষণ করুন</button>
@@ -556,6 +576,7 @@ function showBannerFormModal(banner = null) {
     const url = modal.querySelector('#b-url').value.trim();
     const title = modal.querySelector('#b-title').value.trim();
     const subtitle = modal.querySelector('#b-subtitle').value.trim();
+    const linkedCategoryId = modal.querySelector('#b-category').value;
 
     if (!url) return;
 
@@ -563,6 +584,7 @@ function showBannerFormModal(banner = null) {
       imageUrl: url,
       title: title,
       subtitle: subtitle,
+      linkedCategoryId: linkedCategoryId || '',
       updatedAt: new Date().toISOString()
     };
 
