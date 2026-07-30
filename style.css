@@ -20,17 +20,26 @@
     background-color: var(--brand-bg);
     color: var(--brand-text);
     scroll-behavior: smooth;
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100%;
+    min-height: 100vh;
+    min-height: 100dvh;
   }
 
   body {
     margin: 0;
     padding: 0;
+    width: 100%;
+    max-width: 100%;
     min-height: 100vh;
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
     overflow-x: hidden;
-    padding-bottom: calc(64px + var(--sab));
+    overflow-y: auto;
+    padding-bottom: calc(100px + var(--sab));
+    -webkit-overflow-scrolling: touch;
   }
 
   @supports (padding-top: env(safe-area-inset-top)) {

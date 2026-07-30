@@ -216,12 +216,28 @@ function setupGlobalEventListeners() {
 
   loginForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = document.getElementById('login-email').value;
+    const identifier = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
+    const submitBtn = loginForm.querySelector('button[type="submit"]');
+    const origText = submitBtn ? submitBtn.textContent : '';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'লগইন হচ্ছে...';
+    }
     try {
-      await loginUser(email, password);
-      document.getElementById('auth-modal')?.classList.add('hidden');
-    } catch (err) {}
+      const user = await loginUser(identifier, password);
+      if (user) {
+        document.getElementById('auth-modal')?.classList.add('hidden');
+        loginForm.reset();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = origText;
+      }
+    }
   });
 
   registerForm?.addEventListener('submit', async (e) => {
@@ -230,28 +246,66 @@ function setupGlobalEventListeners() {
     const phone = document.getElementById('reg-phone').value;
     const email = document.getElementById('reg-email').value;
     const password = document.getElementById('reg-password').value;
+    const submitBtn = registerForm.querySelector('button[type="submit"]');
+    const origText = submitBtn ? submitBtn.textContent : '';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'রেজিস্টার হচ্ছে...';
+    }
     try {
-      await registerUser(email, password, name, phone);
-      document.getElementById('auth-modal')?.classList.add('hidden');
+      const user = await registerUser(email, password, name, phone);
+      if (user) {
+        document.getElementById('auth-modal')?.classList.add('hidden');
+        registerForm.reset();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = origText;
+      }
+    }
+  });
+
+  document.getElementById('forgot-password-btn')?.addEventListener('click', async () => {
+    const email = document.getElementById('login-email').value.trim();
+    if (!email || !email.includes('@')) {
+      showToast('দয়া করে আপনার ইমেইল এড্রেসটি লিখুন', 'error');
+      document.getElementById('login-email').focus();
+      return;
+    }
+    try {
+      await resetPassword(email);
     } catch (err) {}
   });
 
-  document.getElementById('google-login-btn')?.addEventListener('click', async () => {
+  const handleGoogleAuth = async (btn) => {
+    if (!btn || btn.disabled) return;
+    const origOpacity = btn.style.opacity;
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
     try {
       const user = await loginWithGoogle();
       if (user) {
         document.getElementById('auth-modal')?.classList.add('hidden');
       }
-    } catch (err) {}
+    } catch (err) {
+      console.warn("Google login handler error:", err);
+    } finally {
+      btn.disabled = false;
+      btn.style.opacity = origOpacity || '1';
+    }
+  };
+
+  document.getElementById('google-login-btn')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    handleGoogleAuth(e.currentTarget);
   });
 
-  document.getElementById('google-register-btn')?.addEventListener('click', async () => {
-    try {
-      const user = await loginWithGoogle();
-      if (user) {
-        document.getElementById('auth-modal')?.classList.add('hidden');
-      }
-    } catch (err) {}
+  document.getElementById('google-register-btn')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    handleGoogleAuth(e.currentTarget);
   });
 
   // Search input live filter
@@ -791,7 +845,7 @@ async function showProductDetailsModal(productId) {
   modal.id = 'product-details-modal';
 
   modal.innerHTML = `
-    <div class="bg-white w-full max-w-2xl max-h-[90vh] rounded-t-2xl sm:rounded-2xl overflow-y-auto p-4 sm:p-6 shadow-2xl relative flex flex-col gap-4">
+    <div class="bg-white w-full max-w-2xl max-h-[90vh] max-h-[90dvh] rounded-t-2xl sm:rounded-2xl overflow-y-auto p-4 sm:p-6 pb-20 sm:pb-6 shadow-2xl relative flex flex-col gap-4">
       <button id="close-details-btn" class="absolute top-4 right-4 z-10 p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>

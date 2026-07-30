@@ -54,11 +54,6 @@ onAuthStateChanged(auth, async (user) => {
 function initAdminApp() {
   setupAdminNav();
   renderAdminTab('dashboard');
-
-  document.getElementById('admin-logout-btn')?.addEventListener('click', async () => {
-    await auth.signOut();
-    window.location.href = './index.html';
-  });
 }
 
 function setupAdminNav() {
