@@ -186,11 +186,11 @@ export function createProductCardHTML(p) {
           </div>
 
           <div class="product-card-actions">
-            <button class="add-to-cart-btn btn-outline" data-id="${p.id}">
+            <button class="add-to-cart-btn" data-id="${p.id}">
               <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/></svg>
               <span>কার্টে রাখুন</span>
             </button>
-            <button class="buy-now-btn btn-filled" data-id="${p.id}">
+            <button class="buy-now-btn" data-id="${p.id}">
               <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
               <span>এখনই কিনুন</span>
             </button>

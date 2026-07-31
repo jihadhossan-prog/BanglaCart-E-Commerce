@@ -383,32 +383,45 @@ html.dark .product-card-wish-btn {
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
-/* Outline-style Add to Cart button */
-.product-card-actions .btn-outline {
-  border: 1.5px solid var(--brand-primary);
-  background-color: transparent;
-  color: var(--brand-primary);
+/* Button standard styles: "কার্টে রাখুন" and "এখনই কিনুন" */
+.add-to-cart-btn, .buy-now-btn {
+  background-color: #ffffff !important;
+  border: 1.5px solid !important;
+  border-radius: 4px !important; /* Sharp corners consistently */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease !important;
+  cursor: pointer;
 }
 
-/* Hover effect on outline button: smooth transition to filled */
+/* Specific color themes */
+.add-to-cart-btn {
+  border-color: var(--brand-primary) !important;
+  color: var(--brand-primary) !important;
+}
+
+.buy-now-btn {
+  border-color: var(--brand-accent) !important;
+  color: var(--brand-accent) !important;
+}
+
+/* Dark mode overrides: use dark surface background instead of pure white */
+html.dark .add-to-cart-btn, html.dark .buy-now-btn {
+  background-color: var(--brand-surface) !important;
+}
+
+/* Hover states (only on hover-enabled devices) */
 @media (hover: hover) {
-  .product-card-actions .btn-outline:hover {
-    background-color: var(--brand-primary);
-    color: var(--text-inverse);
+  .add-to-cart-btn:hover {
+    background-color: var(--brand-primary) !important;
+    color: #ffffff !important;
+    border-color: var(--brand-primary) !important;
   }
-}
-
-/* Filled-style Buy Now button */
-.product-card-actions .btn-filled {
-  background-color: var(--brand-primary);
-  color: var(--text-inverse);
-  border: none;
-}
-
-/* Hover effect on filled button: smooth transition to darker shade */
-@media (hover: hover) {
-  .product-card-actions .btn-filled:hover {
-    background-color: var(--brand-primary-hover);
+  .buy-now-btn:hover {
+    background-color: var(--brand-accent) !important;
+    color: #ffffff !important;
+    border-color: var(--brand-accent) !important;
   }
 }
 
@@ -648,15 +661,6 @@ html.dark .chat-container {
 html.dark .chat-bubble.admin {
   background-color: #242f41 !important;
   color: #e2e8f0 !important;
-}
-html.dark .add-to-cart-btn {
-  background-color: #171e2e !important;
-  color: #2dd4bf !important;
-  border-color: #0f766e !important;
-}
-html.dark .add-to-cart-btn:hover {
-  background-color: #0f766e !important;
-  color: #ffffff !important;
 }
 html.dark .bg-teal-100 {
   background-color: rgba(15, 118, 110, 0.25) !important;

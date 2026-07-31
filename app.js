@@ -940,8 +940,8 @@ async function showProductDetailsModal(productId) {
             </div>
 
             <div class="grid grid-cols-2 gap-2">
-              <button id="modal-add-cart" class="py-2.5 bg-teal-50 hover:bg-teal-100 text-teal-700 font-bold rounded-lg text-sm transition">কার্টে যোগ করুন</button>
-              <button id="modal-buy-now" class="py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-lg text-sm transition">এখনই কিনুন</button>
+              <button id="modal-add-cart" class="add-to-cart-btn py-2.5 font-bold rounded text-sm transition">কার্টে যোগ করুন</button>
+              <button id="modal-buy-now" class="buy-now-btn py-2.5 font-bold rounded text-sm transition">এখনই কিনুন</button>
             </div>
           </div>
         </div>
