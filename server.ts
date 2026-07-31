@@ -31,23 +31,6 @@ async function startServer() {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
 
-  app.post("/api/admin/delete-user", async (req, res) => {
-    const { userId } = req.body;
-    if (!userId) {
-      return res.status(400).json({ error: "userId is required" });
-    }
-
-    try {
-      if (getApps().length > 0) {
-        await getAuth().deleteUser(userId);
-      }
-      return res.json({ success: true, message: "User deleted from Firebase Auth" });
-    } catch (err: any) {
-      console.warn("Delete user warning:", err?.message || err);
-      return res.json({ success: false, warning: err?.message || "Firebase Admin Auth deletion bypassed" });
-    }
-  });
-
   // Admin route fallback for cleaner URLs
   app.get("/admin", (_req, res, next) => {
     if (process.env.NODE_ENV === "production") {

@@ -123,5 +123,10 @@ table.admin-table td {
 @media (max-width: 768px) {
   .admin-chat-grid {
     grid-template-columns: 1fr;
+    grid-template-rows: 180px 1fr;
+  }
+  #admin-chat-user-list {
+    border-right: none !important;
+    border-bottom: 1px solid #e2e8f0;
   }
 }

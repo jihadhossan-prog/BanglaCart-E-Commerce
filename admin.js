@@ -869,7 +869,6 @@ async function renderCustomersTab(container) {
               <th>ইমেইল</th>
               <th>ফোন</th>
               <th>রোল</th>
-              <th>অ্যাকশন</th>
             </tr>
           </thead>
           <tbody>
@@ -879,9 +878,6 @@ async function renderCustomersTab(container) {
                 <td>${escapeHtml(c.email || 'N/A')}</td>
                 <td>${escapeHtml(c.phone || 'N/A')}</td>
                 <td><span class="px-2 py-0.5 rounded text-xs font-bold uppercase ${c.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-700'}">${escapeHtml(c.role || 'customer')}</span></td>
-                <td>
-                  ${c.role !== 'admin' ? `<button class="delete-user-btn px-2.5 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded text-xs font-semibold transition" data-id="${c.id}">ইউজার মুছুন</button>` : '<span class="text-xs text-slate-400">অ্যাডমিন</span>'}
-                </td>
               </tr>
             `).join('')}
           </tbody>
@@ -889,43 +885,6 @@ async function renderCustomersTab(container) {
       </div>
     </div>
   `;
-
-  container.querySelectorAll('.delete-user-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const userId = btn.dataset.id;
-      if (!confirm('এই ইউজারকে মুছে ফেলা হবে, নিশ্চিত?')) return;
-
-      try {
-        const res = await fetch('/api/admin/delete-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId })
-        });
-        const resData = await res.json();
-        if (!res.ok) {
-          console.warn('Auth user deletion warning:', resData.error);
-        }
-
-        await deleteDoc(doc(db, 'users', userId));
-
-        try { await deleteDoc(doc(db, 'cart', userId)); } catch (e) {}
-        try { await deleteDoc(doc(db, 'wishlist', userId)); } catch (e) {}
-        try {
-          const msgSnap = await getDocs(collection(db, 'chats', userId, 'messages'));
-          for (const mDoc of msgSnap.docs) {
-            await deleteDoc(mDoc.ref);
-          }
-          await deleteDoc(doc(db, 'chats', userId));
-        } catch (e) {}
-
-        showToast('ইউজার সফলভাবে মুছে ফেলা হয়েছে', 'success');
-        renderAdminTab('customers');
-      } catch (err) {
-        console.error('Error deleting user:', err);
-        showToast('ইউজার মুছতে সমস্যা হয়েছে: ' + (err.message || ''), 'error');
-      }
-    });
-  });
 }
 
 // 7. Coupon Management Module
@@ -1038,7 +997,7 @@ function renderAdminChatTab(container) {
       </div>
 
       <!-- Chat thread view -->
-      <div class="flex flex-col h-full bg-slate-50" id="admin-chat-thread">
+      <div class="flex flex-col h-full bg-slate-50 overflow-hidden" id="admin-chat-thread">
         <div class="flex-1 flex items-center justify-center p-6 text-slate-400 text-xs text-center">
           বাঁদিকের তালিকা থেকে যেকোনো গ্রাহক নির্বাচন করুন
         </div>
@@ -1084,7 +1043,7 @@ function openAdminChatThread(chatId, chatMeta, threadBox) {
       ${escapeHtml(chatMeta.userName || 'গ্রাহক')} - ${escapeHtml(chatMeta.userEmail || '')}
     </div>
 
-    <div id="admin-msg-box" class="flex-1 p-3 overflow-y-auto space-y-2"></div>
+    <div id="admin-msg-box" class="flex-1 p-3 overflow-y-auto space-y-2 min-h-0"></div>
 
     <form id="admin-chat-form" class="p-2 bg-white border-t border-slate-200 flex gap-2">
       <input type="text" id="admin-msg-input" placeholder="উত্তর লিখুন..." class="flex-1 text-xs p-2 border border-slate-300 rounded-lg focus:outline-none" />
@@ -1127,7 +1086,12 @@ function openAdminChatThread(chatId, chatMeta, threadBox) {
 
       msgBox.appendChild(b);
     });
+    
+    // Auto scroll to bottom
     msgBox.scrollTop = msgBox.scrollHeight;
+    setTimeout(() => {
+      msgBox.scrollTop = msgBox.scrollHeight;
+    }, 50);
   });
 
   // Clear unread flag
