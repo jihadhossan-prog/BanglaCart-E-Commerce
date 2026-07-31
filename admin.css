@@ -1,6 +1,6 @@
 /* Admin Dashboard Styling */
 
-@import "tailwindcss";
+/* Tailwind CDN is loaded via script tag in HTML */
 
 :root {
   --admin-primary: #0f766e;

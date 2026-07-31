@@ -1,6 +1,6 @@
 // Firebase Configuration and Initialization
-import { initializeApp } from "firebase/app";
-import { getAnalytics, isSupported } from "firebase/analytics";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-analytics.js";
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
@@ -11,7 +11,7 @@ import {
   updateProfile,
   GoogleAuthProvider,
   signInWithPopup
-} from "firebase/auth";
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import { 
   getFirestore, 
   collection, 
@@ -33,7 +33,7 @@ import {
   arrayUnion,
   arrayRemove,
   getCountFromServer
-} from "firebase/firestore";
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDPT3fRRT8m_zHlpEfo3wuuWe2NRsHHUqs",

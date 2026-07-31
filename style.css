@@ -1,4 +1,4 @@
-@import "tailwindcss";
+/* Tailwind CDN is loaded via script tag in HTML */
 
 @layer base {
   :root {

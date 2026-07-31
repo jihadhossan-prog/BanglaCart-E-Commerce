@@ -19,7 +19,7 @@ import {
   getCountFromServer
 } from './firebase-config.js';
 import { formatPrice, showToast, escapeHtml, getValidImageUrl } from './core.js';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
 
 let currentAdminUser = null;
 let activeAdminTab = 'dashboard';
