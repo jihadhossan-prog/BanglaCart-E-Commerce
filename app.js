@@ -53,6 +53,7 @@ let notificationUnsubscribe = null;
 let userNotifications = [];
 let lastColumns = 2; // Will be initialized on load
 let activeCarouselIntervals = [];
+let categoryAutoScrollInterval = null;
 
 function clearActiveCarouselIntervals() {
   activeCarouselIntervals.forEach(id => clearInterval(id));
@@ -524,16 +525,13 @@ function renderBannerSlider(container, banners) {
   function handleBannerClick(b) {
     if (b && b.linkedCategoryId) {
       selectedCategory = b.linkedCategoryId;
-      const chipsContainer = document.getElementById('category-chips-container');
-      if (chipsContainer) {
-        chipsContainer.querySelectorAll('.category-chip').forEach(c => {
-          if (c.dataset.cat === b.linkedCategoryId) {
-            c.classList.add('active');
-          } else {
-            c.classList.remove('active');
-          }
-        });
-      }
+      document.querySelectorAll('.category-chip').forEach(c => {
+        if (c.dataset.cat === b.linkedCategoryId) {
+          c.classList.add('active');
+        } else {
+          c.classList.remove('active');
+        }
+      });
       renderCategoryProductGrids(b.linkedCategoryId);
       window.scrollTo({ top: 400, behavior: 'smooth' });
     }
@@ -687,8 +685,12 @@ async function renderHomeView(container) {
       <div class="flex items-center justify-between mb-2">
         <h2 class="font-bold text-slate-800 text-sm sm:text-base">ক্যাটাগরি সমূহ</h2>
       </div>
-      <div id="category-chips-container" class="category-scroll">
-        <div class="category-chip active" data-cat="সব">সব</div>
+      <div class="flex items-center gap-2 w-full overflow-hidden">
+        <div id="static-category-container" class="flex-shrink-0">
+          <div class="category-chip active" data-cat="সব">সব</div>
+        </div>
+        <div id="category-chips-container" class="category-scroll flex-grow">
+        </div>
       </div>
     </section>
 
@@ -704,7 +706,7 @@ async function renderHomeView(container) {
     if (!sliderContainer) return;
 
     // Filter slider and side banners
-    const sliderBanners = banners.filter(b => b.type !== 'side');
+    const sliderBanners = banners.filter(b => b.type !== 'side' && b.type !== 'mid');
     const sideBanners = banners.filter(b => b.type === 'side');
 
     renderBannerSlider(sliderContainer, sliderBanners);
@@ -732,16 +734,13 @@ async function renderHomeView(container) {
         if (activeSideBanner.linkedCategoryId) {
           sideContainer.querySelector('#side-banner-click')?.addEventListener('click', () => {
             selectedCategory = activeSideBanner.linkedCategoryId;
-            const chipsContainer = document.getElementById('category-chips-container');
-            if (chipsContainer) {
-              chipsContainer.querySelectorAll('.category-chip').forEach(c => {
-                if (c.dataset.cat === activeSideBanner.linkedCategoryId) {
-                  c.classList.add('active');
-                } else {
-                  c.classList.remove('active');
-                }
-              });
-            }
+            document.querySelectorAll('.category-chip').forEach(c => {
+              if (c.dataset.cat === activeSideBanner.linkedCategoryId) {
+                c.classList.add('active');
+              } else {
+                c.classList.remove('active');
+              }
+            });
             renderCategoryProductGrids(activeSideBanner.linkedCategoryId);
             window.scrollTo({ top: 400, behavior: 'smooth' });
           });
@@ -755,25 +754,259 @@ async function renderHomeView(container) {
 
   // Fetch Categories
   categoriesList = await fetchCategories();
+  const staticContainer = document.getElementById('static-category-container');
   const chipsContainer = document.getElementById('category-chips-container');
-  if (chipsContainer) {
-    chipsContainer.innerHTML = `<div class="category-chip ${selectedCategory === 'সব' ? 'active' : ''}" data-cat="সব">সব</div>`;
-    categoriesList.forEach(c => {
-      chipsContainer.insertAdjacentHTML('beforeend', `<div class="category-chip ${selectedCategory === c.name ? 'active' : ''}" data-cat="${escapeHtml(c.name)}">${escapeHtml(c.name)}</div>`);
-    });
+  if (staticContainer && chipsContainer) {
+    staticContainer.innerHTML = `
+      <div class="category-chip ${selectedCategory === 'সব' ? 'active' : ''}" data-cat="সব">
+        <span>সব</span>
+      </div>
+    `;
 
-    chipsContainer.querySelectorAll('.category-chip').forEach(chip => {
+    chipsContainer.innerHTML = '';
+    // Render the category list twice for seamless infinite wrapping
+    for (let i = 0; i < 2; i++) {
+      categoriesList.forEach(c => {
+        const imgHtml = c.imageUrl ? `<img src="${escapeHtml(c.imageUrl)}" class="category-chip-img" referrerPolicy="no-referrer" />` : '';
+        chipsContainer.insertAdjacentHTML('beforeend', `
+          <div class="category-chip ${selectedCategory === c.name ? 'active' : ''} ${c.imageUrl ? 'has-img' : ''}" data-cat="${escapeHtml(c.name)}">
+            ${imgHtml}
+            <span>${escapeHtml(c.name)}</span>
+          </div>
+        `);
+      });
+    }
+
+    const allChips = document.querySelectorAll('.category-chip');
+    allChips.forEach(chip => {
       chip.addEventListener('click', () => {
-        chipsContainer.querySelectorAll('.category-chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-        selectedCategory = chip.dataset.cat;
+        const cat = chip.dataset.cat;
+        allChips.forEach(c => {
+          if (c.dataset.cat === cat) {
+            c.classList.add('active');
+          } else {
+            c.classList.remove('active');
+          }
+        });
+        selectedCategory = cat;
         renderCategoryProductGrids(selectedCategory);
       });
     });
+
+    initCategoryChipsAutoScroll(chipsContainer);
   }
 
   // Render Category Grids
   await renderCategoryProductGrids(selectedCategory);
+}
+
+// Automated Category Chips Smooth Scrolling & Mouse/Touch Drag
+function initCategoryChipsAutoScroll(chipsContainer) {
+  if (!chipsContainer) return;
+
+  const chips = chipsContainer.querySelectorAll('.category-chip');
+  const N = categoriesList.length;
+  if (N <= 1 || chips.length < N * 2) return;
+
+  // Clear previous category auto-scroll interval if any
+  if (categoryAutoScrollInterval) {
+    clearInterval(categoryAutoScrollInterval);
+    categoryAutoScrollInterval = null;
+  }
+
+  let resumeTimeout = null;
+  let currentScrollIdx = 0;
+
+  // Find initial active index within the first set (original N elements)
+  for (let i = 0; i < N; i++) {
+    if (chips[i].classList.contains('active')) {
+      currentScrollIdx = i;
+      break;
+    }
+  }
+
+  // Calculate width of original N chips
+  let originalWidth = 0;
+  function getOriginalWidth() {
+    if (originalWidth > 0) return originalWidth;
+    if (chips[N] && chips[0]) {
+      originalWidth = chips[N].offsetLeft - chips[0].offsetLeft;
+    }
+    return originalWidth;
+  }
+
+  // Drag state
+  let isDown = false;
+  let startX = 0;
+  let scrollLeft = 0;
+  let hasMoved = false;
+  let isInteracting = false;
+
+  chipsContainer.addEventListener('mousedown', (e) => {
+    isDown = true;
+    startX = e.pageX - chipsContainer.offsetLeft;
+    scrollLeft = chipsContainer.scrollLeft;
+    hasMoved = false;
+    pauseAutoScroll();
+  });
+
+  chipsContainer.addEventListener('mousemove', (e) => {
+    if (!isDown) return;
+    e.preventDefault();
+    const x = e.pageX - chipsContainer.offsetLeft;
+    const dist = Math.abs(x - startX);
+    if (dist > 5) {
+      hasMoved = true;
+    }
+    const walk = (x - startX) * 1.2;
+    chipsContainer.scrollLeft = scrollLeft - walk;
+  });
+
+  function wrapScrollPosition() {
+    const width = getOriginalWidth();
+    if (!width) return;
+    const sLeft = chipsContainer.scrollLeft;
+    if (sLeft >= width) {
+      chipsContainer.scrollLeft = sLeft - width;
+    } else if (sLeft <= 0) {
+      chipsContainer.scrollLeft = sLeft + width;
+    }
+  }
+
+  function updateScrollIdxToClosest() {
+    const width = getOriginalWidth();
+    if (!width) return;
+    wrapScrollPosition();
+
+    const containerCenter = chipsContainer.scrollLeft + chipsContainer.clientWidth / 2;
+    let closestIdx = 0;
+    let minDistance = Infinity;
+
+    // Only look within the first N elements
+    for (let idx = 0; idx < N; idx++) {
+      const chip = chips[idx];
+      const chipCenter = chip.offsetLeft + chip.clientWidth / 2;
+      const dist = Math.abs(chipCenter - containerCenter);
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestIdx = idx;
+      }
+    }
+    currentScrollIdx = closestIdx;
+  }
+
+  function handleInteractionEnd() {
+    updateScrollIdxToClosest();
+    resumeAutoScroll();
+  }
+
+  chipsContainer.addEventListener('mouseup', () => {
+    if (isDown) {
+      isDown = false;
+      handleInteractionEnd();
+    }
+  });
+
+  chipsContainer.addEventListener('mouseleave', () => {
+    if (isDown) {
+      isDown = false;
+      handleInteractionEnd();
+    }
+  });
+
+  // Touch handlers
+  chipsContainer.addEventListener('touchstart', () => {
+    isInteracting = true;
+    pauseAutoScroll();
+  }, { passive: true });
+
+  chipsContainer.addEventListener('touchend', () => {
+    isInteracting = false;
+    handleInteractionEnd();
+  }, { passive: true });
+
+  // Hover handlers
+  chipsContainer.addEventListener('mouseenter', () => {
+    pauseAutoScroll();
+  });
+
+  chipsContainer.addEventListener('mouseleave', () => {
+    if (!isDown && !isInteracting) {
+      resumeAutoScroll();
+    }
+  });
+
+  // Wheel listener
+  let wheelTimeout = null;
+  chipsContainer.addEventListener('wheel', () => {
+    pauseAutoScroll();
+    clearTimeout(wheelTimeout);
+    wheelTimeout = setTimeout(() => {
+      handleInteractionEnd();
+    }, 200);
+  }, { passive: true });
+
+  function startAutoScroll() {
+    stopAutoScroll();
+    categoryAutoScrollInterval = setInterval(() => {
+      const width = getOriginalWidth();
+      if (!width) return;
+
+      // Check if we are at or past the clone boundary; silently snap back to 1st set
+      const sLeft = chipsContainer.scrollLeft;
+      if (sLeft >= width - 5) {
+        chipsContainer.scrollLeft = sLeft - width;
+        updateScrollIdxToClosest();
+      }
+
+      currentScrollIdx = (currentScrollIdx + 1) % N;
+      const targetChip = chips[currentScrollIdx];
+      if (targetChip) {
+        chipsContainer.scrollTo({
+          left: targetChip.offsetLeft - (chipsContainer.clientWidth / 2) + (targetChip.clientWidth / 2),
+          behavior: 'smooth'
+        });
+      }
+    }, 3000);
+  }
+
+  function stopAutoScroll() {
+    if (categoryAutoScrollInterval) {
+      clearInterval(categoryAutoScrollInterval);
+      categoryAutoScrollInterval = null;
+    }
+  }
+
+  function pauseAutoScroll() {
+    stopAutoScroll();
+    clearTimeout(resumeTimeout);
+  }
+
+  function resumeAutoScroll() {
+    clearTimeout(resumeTimeout);
+    resumeTimeout = setTimeout(() => {
+      startAutoScroll();
+    }, 1000);
+  }
+
+  // Hook into clicking
+  chips.forEach((chip, idx) => {
+    chip.addEventListener('click', (e) => {
+      if (hasMoved) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      currentScrollIdx = idx % N;
+      chipsContainer.scrollTo({
+        left: chip.offsetLeft - (chipsContainer.clientWidth / 2) + (chip.clientWidth / 2),
+        behavior: 'smooth'
+      });
+    }, { capture: true });
+  });
+
+  // Start initially
+  startAutoScroll();
 }
 
 // Render Category Product Grids (2 cols x 2 rows = 4 products max initially, plus "আরও" link)
@@ -849,16 +1082,13 @@ async function renderCategoryProductGrids(catFilter = 'সব') {
         if (mb.linkedCategoryId) {
           midBannerDiv.addEventListener('click', () => {
             selectedCategory = mb.linkedCategoryId;
-            const chipsContainer = document.getElementById('category-chips-container');
-            if (chipsContainer) {
-              chipsContainer.querySelectorAll('.category-chip').forEach(c => {
-                if (c.dataset.cat === mb.linkedCategoryId) {
-                  c.classList.add('active');
-                } else {
-                  c.classList.remove('active');
-                }
-              });
-            }
+            document.querySelectorAll('.category-chip').forEach(c => {
+              if (c.dataset.cat === mb.linkedCategoryId) {
+                c.classList.add('active');
+              } else {
+                c.classList.remove('active');
+              }
+            });
             renderCategoryProductGrids(mb.linkedCategoryId);
             window.scrollTo({ top: 400, behavior: 'smooth' });
           });
@@ -909,16 +1139,13 @@ async function renderCategoryProductGrids(catFilter = 'সব') {
       if (mb.linkedCategoryId) {
         midBannerDiv.addEventListener('click', () => {
           selectedCategory = mb.linkedCategoryId;
-          const chipsContainer = document.getElementById('category-chips-container');
-          if (chipsContainer) {
-            chipsContainer.querySelectorAll('.category-chip').forEach(c => {
-              if (c.dataset.cat === mb.linkedCategoryId) {
-                c.classList.add('active');
-              } else {
-                c.classList.remove('active');
-              }
-            });
-          }
+          document.querySelectorAll('.category-chip').forEach(c => {
+            if (c.dataset.cat === mb.linkedCategoryId) {
+              c.classList.add('active');
+            } else {
+              c.classList.remove('active');
+            }
+          });
           renderCategoryProductGrids(mb.linkedCategoryId);
           window.scrollTo({ top: 400, behavior: 'smooth' });
         });
@@ -1187,49 +1414,68 @@ async function renderSearchView(searchTerm) {
   }
 }
 
-// Attach Event Listeners to Product Cards (View details, Add to cart, Wishlist)
+let isProductCardEventsAttached = false;
+
+// Attach Event Listeners to Product Cards (View details, Add to cart, Wishlist) using event delegation
 function attachProductCardEvents() {
-  document.querySelectorAll('.view-product-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const id = btn.dataset.id;
-      showProductDetailsModal(id);
-    });
-  });
+  if (isProductCardEventsAttached) return;
+  isProductCardEventsAttached = true;
 
-  document.querySelectorAll('.add-to-cart-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
+  document.body.addEventListener('click', async (e) => {
+    // 1. Wishlist Button
+    const wishBtn = e.target.closest('.wish-btn');
+    if (wishBtn) {
       e.stopPropagation();
-      const id = btn.dataset.id;
-      const product = await getProductById(id);
-      if (product) {
-        addToCart(product, 1);
+      const id = wishBtn.dataset.id;
+      if (id) {
+        await toggleWishlist(id);
+        if (activeTab === 'wishlist') {
+          const main = document.getElementById('app-content');
+          if (main) renderWishlistView(main);
+        }
       }
-    });
-  });
+      return;
+    }
 
-  document.querySelectorAll('.buy-now-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
+    // 2. Add To Cart Button
+    const addToCartBtn = e.target.closest('.add-to-cart-btn');
+    if (addToCartBtn) {
       e.stopPropagation();
-      const id = btn.dataset.id;
-      const product = await getProductById(id);
-      if (product) {
-        setBuyNowItem(product, 1);
-        renderView('checkout');
+      const id = addToCartBtn.dataset.id;
+      if (id) {
+        const product = await getProductById(id);
+        if (product) {
+          addToCart(product, 1);
+        }
       }
-    });
-  });
+      return;
+    }
 
-  document.querySelectorAll('.wish-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
+    // 3. Buy Now Button
+    const buyNowBtn = e.target.closest('.buy-now-btn');
+    if (buyNowBtn) {
       e.stopPropagation();
-      const id = btn.dataset.id;
-      await toggleWishlist(id);
-      if (activeTab === 'wishlist') {
-        const main = document.getElementById('app-content');
-        if (main) renderWishlistView(main);
+      const id = buyNowBtn.dataset.id;
+      if (id) {
+        const product = await getProductById(id);
+        if (product) {
+          setBuyNowItem(product, 1);
+          renderView('checkout');
+        }
       }
-    });
+      return;
+    }
+
+    // 4. View Product details (Image or Title click)
+    const viewBtn = e.target.closest('.view-product-btn');
+    if (viewBtn) {
+      e.stopPropagation();
+      const id = viewBtn.dataset.id;
+      if (id) {
+        showProductDetailsModal(id);
+      }
+      return;
+    }
   });
 }
 

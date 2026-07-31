@@ -19,6 +19,7 @@
   --bg-card: #ffffff;             /* white / card background */
   --bg-header: #ffffff;           /* white / header background */
   --bg-bottom-nav: rgba(255, 255, 255, 0.95); /* bottom nav bg */
+  --bottom-nav-bg: #e8f5f0;       /* very pale brand primary green/teal tint */
   --bg-surface: #f1f5f9;          /* slate-100 / surface / hover */
   --bg-accent-light: #f0fdf4;     /* emerald-50 / success light bg */
   --bg-badge: #fef3c7;            /* amber-100 / badge bg */

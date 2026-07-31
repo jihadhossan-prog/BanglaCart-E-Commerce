@@ -112,7 +112,7 @@ button, a, input, select, textarea {
   right: 0;
   height: calc(60px + var(--sab));
   padding-bottom: var(--sab);
-  background-color: var(--bg-bottom-nav);
+  background-color: var(--bottom-nav-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-top: 1px solid var(--brand-border);

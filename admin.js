@@ -426,14 +426,20 @@ async function renderCategoriesTab(container) {
         ${categories.map(c => `
           <div class="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between hover:shadow-xs transition" data-id="${c.id}">
             <div class="flex items-center gap-2">
-              <span class="text-slate-400 drag-handle cursor-grab active:cursor-grabbing p-1 hover:text-slate-600 transition">
+              <span class="text-slate-400 drag-handle cursor-grab active:cursor-grabbing p-1 hover:text-slate-600 transition flex-shrink-0">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/>
                 </svg>
               </span>
-              <span class="font-bold text-slate-800 text-sm">${escapeHtml(c.name)}</span>
+              ${c.imageUrl ? `
+                <img src="${escapeHtml(c.imageUrl)}" class="w-8 h-8 rounded-md object-contain border border-slate-100 bg-slate-50 flex-shrink-0" referrerPolicy="no-referrer" />
+              ` : ''}
+              <span class="font-bold text-slate-800 text-sm truncate">${escapeHtml(c.name)}</span>
             </div>
-            <button class="del-cat-btn px-2 py-1 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100 transition" data-id="${c.id}">মুছুন</button>
+            <div class="flex items-center gap-1.5 flex-shrink-0">
+              <button class="edit-cat-btn px-2 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded text-xs font-semibold transition" data-id="${c.id}">এডিট</button>
+              <button class="del-cat-btn px-2 py-1 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100 transition" data-id="${c.id}">মুছুন</button>
+            </div>
           </div>
         `).join('')}
       </div>
@@ -468,25 +474,17 @@ async function renderCategoriesTab(container) {
     });
   }
 
-  container.querySelector('#add-cat-btn')?.addEventListener('click', async () => {
-    const name = prompt('নতুন ক্যাটাগরির নাম লিখুন:');
-    if (name && name.trim()) {
-      // Find max order to place new category at the end
-      let maxOrder = 0;
-      categories.forEach(c => {
-        if (typeof c.order === 'number' && c.order > maxOrder) {
-          maxOrder = c.order;
-        }
-      });
-      const newOrder = maxOrder + 1;
+  container.querySelector('#add-cat-btn')?.addEventListener('click', () => {
+    showCategoryFormModal(null, categories);
+  });
 
-      await addDoc(collection(db, 'categories'), { 
-        name: name.trim(),
-        order: newOrder
-      });
-      showToast('ক্যাটাগরি যোগ করা হয়েছে', 'success');
-      renderAdminTab('categories');
-    }
+  container.querySelectorAll('.edit-cat-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      const catObj = categories.find(x => x.id === b.dataset.id);
+      if (catObj) {
+        showCategoryFormModal(catObj, categories);
+      }
+    });
   });
 
   container.querySelectorAll('.del-cat-btn').forEach(b => {
@@ -497,6 +495,84 @@ async function renderCategoriesTab(container) {
         renderAdminTab('categories');
       }
     });
+  });
+}
+
+// Category Creation/Editing Modal
+function showCategoryFormModal(category = null, categoriesList = []) {
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50';
+  modal.innerHTML = `
+    <div class="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl relative animate-fade-in">
+      <button id="close-cat-modal-btn" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+
+      <h3 class="text-lg font-bold text-slate-800 mb-4">${category ? 'ক্যাটাগরি এডিট করুন' : 'নতুন ক্যাটাগরি যোগ করুন'}</h3>
+
+      <form id="category-form" class="space-y-4">
+        <div>
+          <label class="block font-semibold mb-1 text-xs text-slate-700">ক্যাটাগরির নাম *</label>
+          <input type="text" id="cat-name" required value="${escapeHtml(category?.name || '')}" class="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:outline-none" placeholder="যেমন: মধু, খেজুর ইত্যাদি" />
+        </div>
+
+        <div>
+          <label class="block font-semibold mb-1 text-xs text-slate-700">ক্যাটাগরি ছবি (URL) - ঐচ্ছিক</label>
+          <input type="text" id="cat-img-url" value="${escapeHtml(category?.imageUrl || '')}" class="w-full p-2.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:outline-none" placeholder="https://example.com/image.jpg" />
+          <p class="text-[10px] text-slate-400 mt-1">ক্যাটাগরির জন্য একটি ছবি URL দিতে পারেন। খালি রাখলে শুধু টেক্সট দেখাবে।</p>
+        </div>
+
+        <button type="submit" class="w-full py-2.5 bg-teal-700 text-white font-bold rounded-lg text-sm hover:bg-teal-800 transition">
+          ${category ? 'ক্যাটাগরি আপডেট করুন' : 'ক্যাটাগরি তৈরি করুন'}
+        </button>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  modal.querySelector('#close-cat-modal-btn').addEventListener('click', () => modal.remove());
+
+  modal.querySelector('#category-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = modal.querySelector('#cat-name').value.trim();
+    const imageUrl = modal.querySelector('#cat-img-url').value.trim();
+
+    if (!name) return;
+
+    try {
+      if (category) {
+        // Edit mode
+        await updateDoc(doc(db, 'categories', category.id), {
+          name,
+          imageUrl: imageUrl || ''
+        });
+        showToast('ক্যাটাগরি আপডেট করা হয়েছে', 'success');
+      } else {
+        // Add mode
+        let maxOrder = 0;
+        categoriesList.forEach(c => {
+          if (typeof c.order === 'number' && c.order > maxOrder) {
+            maxOrder = c.order;
+          }
+        });
+        const newOrder = maxOrder + 1;
+
+        await addDoc(collection(db, 'categories'), {
+          name,
+          imageUrl: imageUrl || '',
+          order: newOrder
+        });
+        showToast('ক্যাটাগরি যোগ করা হয়েছে', 'success');
+      }
+      modal.remove();
+      renderAdminTab('categories');
+    } catch (err) {
+      console.error('Error saving category:', err);
+      showToast('ক্যাটাগরি সেভ করতে ব্যর্থ হয়েছে', 'error');
+    }
   });
 }
 
