@@ -764,18 +764,15 @@ async function renderHomeView(container) {
     `;
 
     chipsContainer.innerHTML = '';
-    // Render the category list twice for seamless infinite wrapping
-    for (let i = 0; i < 2; i++) {
-      categoriesList.forEach(c => {
-        const imgHtml = c.imageUrl ? `<img src="${escapeHtml(c.imageUrl)}" class="category-chip-img" referrerPolicy="no-referrer" />` : '';
-        chipsContainer.insertAdjacentHTML('beforeend', `
-          <div class="category-chip ${selectedCategory === c.name ? 'active' : ''} ${c.imageUrl ? 'has-img' : ''}" data-cat="${escapeHtml(c.name)}">
-            ${imgHtml}
-            <span>${escapeHtml(c.name)}</span>
-          </div>
-        `);
-      });
-    }
+    categoriesList.forEach(c => {
+      const imgHtml = c.imageUrl ? `<img src="${escapeHtml(c.imageUrl)}" class="category-chip-img" referrerPolicy="no-referrer" />` : '';
+      chipsContainer.insertAdjacentHTML('beforeend', `
+        <div class="category-chip ${selectedCategory === c.name ? 'active' : ''} ${c.imageUrl ? 'has-img' : ''}" data-cat="${escapeHtml(c.name)}">
+          ${imgHtml}
+          <span>${escapeHtml(c.name)}</span>
+        </div>
+      `);
+    });
 
     const allChips = document.querySelectorAll('.category-chip');
     allChips.forEach(chip => {
@@ -805,8 +802,7 @@ function initCategoryChipsAutoScroll(chipsContainer) {
   if (!chipsContainer) return;
 
   const chips = chipsContainer.querySelectorAll('.category-chip');
-  const N = categoriesList.length;
-  if (N <= 1 || chips.length < N * 2) return;
+  if (chips.length <= 1) return;
 
   // Clear previous category auto-scroll interval if any
   if (categoryAutoScrollInterval) {
@@ -817,22 +813,12 @@ function initCategoryChipsAutoScroll(chipsContainer) {
   let resumeTimeout = null;
   let currentScrollIdx = 0;
 
-  // Find initial active index within the first set (original N elements)
-  for (let i = 0; i < N; i++) {
+  // Find initial active index
+  for (let i = 0; i < chips.length; i++) {
     if (chips[i].classList.contains('active')) {
       currentScrollIdx = i;
       break;
     }
-  }
-
-  // Calculate width of original N chips
-  let originalWidth = 0;
-  function getOriginalWidth() {
-    if (originalWidth > 0) return originalWidth;
-    if (chips[N] && chips[0]) {
-      originalWidth = chips[N].offsetLeft - chips[0].offsetLeft;
-    }
-    return originalWidth;
   }
 
   // Drag state
@@ -862,36 +848,19 @@ function initCategoryChipsAutoScroll(chipsContainer) {
     chipsContainer.scrollLeft = scrollLeft - walk;
   });
 
-  function wrapScrollPosition() {
-    const width = getOriginalWidth();
-    if (!width) return;
-    const sLeft = chipsContainer.scrollLeft;
-    if (sLeft >= width) {
-      chipsContainer.scrollLeft = sLeft - width;
-    } else if (sLeft <= 0) {
-      chipsContainer.scrollLeft = sLeft + width;
-    }
-  }
-
   function updateScrollIdxToClosest() {
-    const width = getOriginalWidth();
-    if (!width) return;
-    wrapScrollPosition();
-
     const containerCenter = chipsContainer.scrollLeft + chipsContainer.clientWidth / 2;
     let closestIdx = 0;
     let minDistance = Infinity;
 
-    // Only look within the first N elements
-    for (let idx = 0; idx < N; idx++) {
-      const chip = chips[idx];
+    chips.forEach((chip, idx) => {
       const chipCenter = chip.offsetLeft + chip.clientWidth / 2;
       const dist = Math.abs(chipCenter - containerCenter);
       if (dist < minDistance) {
         minDistance = dist;
         closestIdx = idx;
       }
-    }
+    });
     currentScrollIdx = closestIdx;
   }
 
@@ -949,21 +918,13 @@ function initCategoryChipsAutoScroll(chipsContainer) {
   function startAutoScroll() {
     stopAutoScroll();
     categoryAutoScrollInterval = setInterval(() => {
-      const width = getOriginalWidth();
-      if (!width) return;
-
-      // Check if we are at or past the clone boundary; silently snap back to 1st set
-      const sLeft = chipsContainer.scrollLeft;
-      if (sLeft >= width - 5) {
-        chipsContainer.scrollLeft = sLeft - width;
-        updateScrollIdxToClosest();
-      }
-
-      currentScrollIdx = (currentScrollIdx + 1) % N;
+      if (chips.length <= 1) return;
+      currentScrollIdx = (currentScrollIdx + 1) % chips.length;
       const targetChip = chips[currentScrollIdx];
       if (targetChip) {
+        const targetLeft = currentScrollIdx === 0 ? 0 : targetChip.offsetLeft - (chipsContainer.clientWidth / 2) + (targetChip.clientWidth / 2);
         chipsContainer.scrollTo({
-          left: targetChip.offsetLeft - (chipsContainer.clientWidth / 2) + (targetChip.clientWidth / 2),
+          left: targetLeft,
           behavior: 'smooth'
         });
       }
@@ -997,9 +958,10 @@ function initCategoryChipsAutoScroll(chipsContainer) {
         e.stopPropagation();
         return;
       }
-      currentScrollIdx = idx % N;
+      currentScrollIdx = idx;
+      const targetLeft = idx === 0 ? 0 : chip.offsetLeft - (chipsContainer.clientWidth / 2) + (chip.clientWidth / 2);
       chipsContainer.scrollTo({
-        left: chip.offsetLeft - (chipsContainer.clientWidth / 2) + (chip.clientWidth / 2),
+        left: targetLeft,
         behavior: 'smooth'
       });
     }, { capture: true });
