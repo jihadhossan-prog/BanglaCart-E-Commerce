@@ -2029,33 +2029,204 @@ function renderOrderSuccessView(container, orderDoc) {
 
 // Chat View
 function renderChatView(container) {
+  if (!window.aiChatHistory) {
+    window.aiChatHistory = [
+      { 
+        role: 'model', 
+        text: 'হ্যালো! বাংলামার্ট-এর স্বয়ংক্রিয় অ্যাসিস্ট্যান্ট-এ আপনাকে স্বাগতম। আমি আপনাকে কীভাবে সাহায্য করতে পারি? পণ্য, অর্ডার পদ্ধতি, ডেলিভারি বা রিটার্ন পলিসি সম্পর্কে জানতে যেকোনো প্রশ্ন করতে পারেন।', 
+        timestamp: new Date() 
+      }
+    ];
+  }
+  
+  if (!window.chatActiveSubTab) {
+    window.chatActiveSubTab = 'ai'; // 'ai' or 'admin'
+  }
+
   container.innerHTML = `
-    <div class="chat-container">
-      <div class="p-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-          <h3 class="font-bold text-slate-800 text-xs sm:text-sm">বাংলামার্ট লাইভ সাপোর্ট</h3>
-        </div>
+    <div class="chat-container flex flex-col h-full bg-slate-50">
+      <!-- Tabs Navigation -->
+      <div class="flex border-b border-slate-200 bg-white p-1 gap-1">
+        <button id="tab-btn-ai" class="flex-1 py-2 text-center font-bold text-xs rounded-lg transition duration-200 cursor-pointer flex items-center justify-center gap-1 ${window.chatActiveSubTab === 'ai' ? 'bg-teal-700 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}">
+          <span>🤖 AI অ্যাসিস্ট্যান্ট</span>
+        </button>
+        <button id="tab-btn-admin" class="flex-1 py-2 text-center font-bold text-xs rounded-lg transition duration-200 cursor-pointer flex items-center justify-center gap-1 ${window.chatActiveSubTab === 'admin' ? 'bg-teal-700 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-100'}">
+          <span>👤 এডমিন লাইভ চ্যাট</span>
+        </button>
       </div>
 
-      <div id="chat-messages-box" class="flex-1 p-3 overflow-y-auto"></div>
+      <!-- Main Chat Content Space -->
+      <div class="flex-1 flex flex-col min-h-0 bg-white">
+        <!-- AI Chat Section -->
+        <div id="ai-chat-section" class="flex-1 flex flex-col min-h-0 ${window.chatActiveSubTab === 'ai' ? '' : 'hidden'}">
+          <div id="ai-messages-box" class="flex-1 p-3 overflow-y-auto space-y-3 bg-slate-50 min-h-0"></div>
+          
+          <form id="ai-send-form" class="p-2 border-t border-slate-200 flex items-center gap-2 bg-white">
+            <input type="text" id="ai-msg-input" placeholder="AI অ্যাসিস্ট্যান্টকে প্রশ্ন করুন..." class="flex-1 text-xs border border-slate-300 rounded-lg px-3 py-2.5 focus:border-teal-500 focus:outline-none" />
+            <button type="submit" class="p-2.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+            </button>
+          </form>
+        </div>
 
-      <form id="chat-send-form" class="p-2 border-t border-slate-200 flex items-center gap-2 bg-white">
-        <input type="text" id="chat-msg-input" placeholder="আপনার মেসেজ লিখুন..." class="flex-1 text-xs border border-slate-300 rounded-lg px-3 py-2 focus:outline-none" />
-        <button type="submit" class="p-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg transition">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-        </button>
-      </form>
+        <!-- Human Admin Live Chat Section -->
+        <div id="admin-chat-section" class="flex-1 flex flex-col min-h-0 ${window.chatActiveSubTab === 'admin' ? '' : 'hidden'}">
+          <div id="admin-messages-box" class="flex-1 p-3 overflow-y-auto min-h-0 bg-slate-50"></div>
+          
+          <form id="admin-send-form" class="p-2 border-t border-slate-200 flex items-center gap-2 bg-white">
+            <input type="text" id="admin-msg-input" placeholder="আপনার মেসেজ লিখুন..." class="flex-1 text-xs border border-slate-300 rounded-lg px-3 py-2.5 focus:border-teal-500 focus:outline-none" />
+            <button type="submit" class="p-2.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
   `;
 
-  const box = container.querySelector('#chat-messages-box');
-  initLiveChat(box);
+  const aiBox = container.querySelector('#ai-messages-box');
+  const adminBox = container.querySelector('#admin-messages-box');
+  const aiForm = container.querySelector('#ai-send-form');
+  const adminForm = container.querySelector('#admin-send-form');
 
-  container.querySelector('#chat-send-form').addEventListener('submit', (e) => {
+  const btnAi = container.querySelector('#tab-btn-ai');
+  const btnAdmin = container.querySelector('#tab-btn-admin');
+  const aiSec = container.querySelector('#ai-chat-section');
+  const adminSec = container.querySelector('#admin-chat-section');
+
+  function switchTab(target) {
+    window.chatActiveSubTab = target;
+    if (target === 'ai') {
+      btnAi.className = 'flex-1 py-2 text-center font-bold text-xs rounded-lg transition duration-200 cursor-pointer flex items-center justify-center gap-1 bg-teal-700 text-white shadow-xs';
+      btnAdmin.className = 'flex-1 py-2 text-center font-bold text-xs rounded-lg transition duration-200 cursor-pointer flex items-center justify-center gap-1 text-slate-600 hover:bg-slate-100';
+      aiSec.classList.remove('hidden');
+      adminSec.classList.add('hidden');
+      renderAIMessages();
+    } else {
+      btnAdmin.className = 'flex-1 py-2 text-center font-bold text-xs rounded-lg transition duration-200 cursor-pointer flex items-center justify-center gap-1 bg-teal-700 text-white shadow-xs';
+      btnAi.className = 'flex-1 py-2 text-center font-bold text-xs rounded-lg transition duration-200 cursor-pointer flex items-center justify-center gap-1 text-slate-600 hover:bg-slate-100';
+      aiSec.classList.add('hidden');
+      adminSec.classList.remove('hidden');
+      
+      cleanupLiveChat();
+      initLiveChat(adminBox);
+    }
+  }
+
+  btnAi.addEventListener('click', () => switchTab('ai'));
+  btnAdmin.addEventListener('click', () => switchTab('admin'));
+
+  // --- AI Chat Logic ---
+  function renderAIMessages() {
+    aiBox.innerHTML = '';
+    window.aiChatHistory.forEach((msg) => {
+      const isUser = msg.role === 'user';
+      const bubble = document.createElement('div');
+      bubble.className = `flex ${isUser ? 'justify-end' : 'justify-start'} w-full mb-3`;
+      
+      const timeStr = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+      
+      bubble.innerHTML = `
+        <div class="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs shadow-xs ${
+          isUser 
+            ? 'bg-teal-700 text-white rounded-br-xs' 
+            : 'bg-slate-100 text-slate-800 rounded-bl-xs border border-slate-200'
+        }">
+          <div class="leading-relaxed whitespace-pre-wrap">${escapeHtml(msg.text)}</div>
+          <div class="text-[9px] text-right mt-1.5 opacity-60">${timeStr}</div>
+        </div>
+      `;
+      aiBox.appendChild(bubble);
+    });
+    aiBox.scrollTop = aiBox.scrollHeight;
+  }
+
+  // Handle AI send
+  aiForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const input = container.querySelector('#chat-msg-input');
-    const txt = input.value;
+    const input = container.querySelector('#ai-msg-input');
+    const text = input.value.trim();
+    if (!text) return;
+
+    // 1. Add user message
+    const userMsg = { role: 'user', text, timestamp: new Date() };
+    window.aiChatHistory.push(userMsg);
+    renderAIMessages();
+    input.value = '';
+
+    // 2. Add temporary typing indicator
+    const typingBubble = document.createElement('div');
+    typingBubble.id = 'ai-typing-indicator';
+    typingBubble.className = 'flex justify-start w-full mb-3 animate-pulse';
+    typingBubble.innerHTML = `
+      <div class="max-w-[80%] rounded-2xl px-4 py-3 text-xs bg-slate-100 text-slate-500 rounded-bl-xs border border-slate-200 flex items-center gap-1.5">
+        <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+        <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+        <span class="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+        <span class="ml-1">AI উত্তর লিখছে...</span>
+      </div>
+    `;
+    aiBox.appendChild(typingBubble);
+    aiBox.scrollTop = aiBox.scrollHeight;
+
+    // 3. Request Server AI response
+    try {
+      const historyToSend = window.aiChatHistory.map(m => ({
+        role: m.role,
+        parts: [{ text: m.text }]
+      }));
+
+      const res = await fetch('/api/chat/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: text,
+          history: historyToSend.slice(0, -1) // Send context up to current message
+        })
+      });
+
+      const data = await res.json();
+      
+      // Remove typing indicator
+      const indicator = container.querySelector('#ai-typing-indicator');
+      if (indicator) indicator.remove();
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      // Add model message
+      const modelMsg = { role: 'model', text: data.reply, timestamp: new Date() };
+      window.aiChatHistory.push(modelMsg);
+      renderAIMessages();
+
+    } catch (err) {
+      console.error('AI Chat Error:', err);
+      const indicator = container.querySelector('#ai-typing-indicator');
+      if (indicator) indicator.remove();
+
+      const errorMsg = { 
+        role: 'model', 
+        text: 'দুঃখিত, এই মুহূর্তে এআই অ্যাসিস্ট্যান্ট সার্ভারের সাথে সংযোগ করা যাচ্ছে না। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।', 
+        timestamp: new Date() 
+      };
+      window.aiChatHistory.push(errorMsg);
+      renderAIMessages();
+    }
+  });
+
+  // --- Admin Live Chat Logic ---
+  if (window.chatActiveSubTab === 'admin') {
+    initLiveChat(adminBox);
+  } else {
+    renderAIMessages();
+  }
+
+  // Handle Admin message send
+  adminForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = container.querySelector('#admin-msg-input');
+    const txt = input.value.trim();
     if (txt) {
       sendChatMessage(txt);
       input.value = '';

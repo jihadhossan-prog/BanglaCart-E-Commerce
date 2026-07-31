@@ -119,6 +119,8 @@ async function renderAdminTab(tab) {
     renderNotificationsTab(main);
   } else if (tab === 'content') {
     await renderContentTab(main);
+  } else if (tab === 'ai-settings') {
+    await renderAISettingsTab(main);
   }
 }
 
@@ -1817,5 +1819,158 @@ async function renderContentTab(container) {
   } catch (err) {
     console.error('Error loading page contents:', err);
     container.innerHTML = `<p class="text-xs text-red-500">কন্টেন্ট লোড করতে সমস্যা হয়েছে।</p>`;
+  }
+}
+
+// 12. AI Chatbot Settings Module
+async function renderAISettingsTab(container) {
+  try {
+    container.innerHTML = `
+      <div class="space-y-6">
+        <div class="flex items-center justify-between pb-4 border-b border-slate-200">
+          <div>
+            <h1 class="text-lg font-bold text-slate-800">🤖 AI চ্যাটবট সেটিংস (AI Chatbot Settings)</h1>
+            <p class="text-xs text-slate-500 mt-1">এখানে সেট করা তথ্য অনুযায়ী কাস্টমার চ্যাট পেজে AI অ্যাসিস্ট্যান্ট স্বয়ংক্রিয়ভাবে উত্তর দেবে।</p>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-5">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1.5">প্রতিষ্ঠানের নাম (Business Name)</label>
+              <input type="text" id="ai-business-name" class="w-full text-xs border border-slate-200 rounded-lg p-2.5 focus:border-teal-500 focus:outline-none" placeholder="যেমন: বাংলামার্ট" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1.5">ফোন নম্বরসমূহ (Phone Numbers)</label>
+              <input type="text" id="ai-phones" class="w-full text-xs border border-slate-200 rounded-lg p-2.5 focus:border-teal-500 focus:outline-none" placeholder="যেমন: +8801700000000, +8801800000000" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1.5">ইমেইল ঠিকানা (Email Address)</label>
+              <input type="email" id="ai-email" class="w-full text-xs border border-slate-200 rounded-lg p-2.5 focus:border-teal-500 focus:outline-none" placeholder="যেমন: support@banglamart.com" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1.5">দোকান/অফিস ঠিকানা (Shop Address)</label>
+              <textarea id="ai-address" rows="1" class="w-full text-xs border border-slate-200 rounded-lg p-2.5 focus:border-teal-500 focus:outline-none resize-none" placeholder="যেমন: লেভেল ৪, হাউজ ১২, রোড ৫, ধানমন্ডি, ঢাকা"></textarea>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1.5">প্রতিষ্ঠানের বর্ণনা ও লক্ষ্য (Business Description)</label>
+            <textarea id="ai-description" rows="3" class="w-full text-xs border border-slate-200 rounded-lg p-2.5 focus:border-teal-500 focus:outline-none" placeholder="প্রতিষ্ঠানের ধরন, কী ধরনের পণ্য বিক্রি করা হয় ইত্যাদি বিস্তারিত লিখুন..."></textarea>
+          </div>
+
+          <div class="border-t border-slate-100 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1.5">ঢাকার ভেতরে ডেলিভারি চার্জ ও সময় (Inside Dhaka)</label>
+              <div class="grid grid-cols-2 gap-2">
+                <input type="number" id="ai-delivery-inside-charge" class="w-full text-xs border border-slate-200 rounded-lg p-2.5 focus:border-teal-500 focus:outline-none" placeholder="চার্জ (যেমন: ৬০)" />
+                <input type="text" id="ai-delivery-inside-time" class="w-full text-xs border border-slate-200 rounded-lg p-2.5 focus:border-teal-500 focus:outline-none" placeholder="সময় (যেমন: ১-২ দিন)" />
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1.5">ঢাকার বাইরে ডেলিভারি চার্জ ও সময় (Outside Dhaka)</label>
+              <div class="grid grid-cols-2 gap-2">
+                <input type="number" id="ai-delivery-outside-charge" class="w-full text-xs border border-slate-200 rounded-lg p-2.5 focus:border-teal-500 focus:outline-none" placeholder="চার্জ (যেমন: ১২০)" />
+                <input type="text" id="ai-delivery-outside-time" class="w-full text-xs border border-slate-200 rounded-lg p-2.5 focus:border-teal-500 focus:outline-none" placeholder="সময় (যেমন: ৩-৫ দিন)" />
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1.5">অর্ডার করার নিয়ম (Ordering Process)</label>
+              <textarea id="ai-order-process" rows="4" class="w-full text-xs border border-slate-200 rounded-lg p-2.5 focus:border-teal-500 focus:outline-none" placeholder="১. প্রোডাক্ট সিলেক্ট করুন...&#10;২. কার্টে যোগ করুন...&#10;৩. ক্যাশ অন ডেলিভারি সিলেক্ট করুন..."></textarea>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 mb-1.5">ফেরত ও পরিবর্তন পলিসি (Return & Exchange Policy)</label>
+              <textarea id="ai-return-policy" rows="4" class="w-full text-xs border border-slate-200 rounded-lg p-2.5 focus:border-teal-500 focus:outline-none" placeholder="ড্যামেজ বা ভুল সাইজের প্রোডাক্ট ডেলিভারি পেলে ২৪ ঘণ্টার মধ্যে আমাদের জানান..."></textarea>
+            </div>
+          </div>
+
+          <div class="flex justify-end pt-2">
+            <button id="save-ai-settings-btn" class="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs rounded-xl shadow-sm transition">সেটিংস সেভ করুন</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Fetch existing settings or populate with default values
+    const settingsDoc = await getDoc(doc(db, 'system_settings', 'ai_bot'));
+    const data = settingsDoc.exists() ? settingsDoc.data() : {
+      businessName: 'বাংলামার্ট',
+      businessDescription: 'বাংলামার্ট হচ্ছে বাংলাদেশের একটি অন্যতম প্রিমিয়াম অনলাইন শপিং ই-কমার্স প্ল্যাটফর্ম। এখানে সেরা মানের এবং শতভাগ খাঁটি ও কোয়ালিটি পণ্য সাশ্রয়ী মূল্যে সরাসরি গ্রাহকদের কাছে পৌঁছে দেওয়া হয়।',
+      phones: '+8801712-345678, +8801912-345678',
+      email: 'support@banglamart.com',
+      address: '১২/এ, সোনারগাঁও রোড, বাংলামোটর, ঢাকা-১০০০, বাংলাদেশ',
+      deliveryInsideCharge: 60,
+      deliveryInsideTime: '১ থেকে ২ কার্যদিবস',
+      deliveryOutsideCharge: 120,
+      deliveryOutsideTime: '৩ থেকে ৫ কার্যদিবস',
+      orderProcess: '১. পছন্দের পণ্যটি বেছে নিয়ে "কার্টে যোগ করুন" অথবা "সরাসরি কিনুন" বাটনে ক্লিক করুন।\n২. চেকআউট পেজে গিয়ে আপনার সঠিক নাম, ফোন নম্বর, এবং সম্পূর্ণ ডেলিভারি ঠিকানা প্রদান করুন।\n৩. ডেলিভারি এলাকা নির্ধারণ করে "অর্ডার প্লেস করুন" বাটনে ক্লিক করে অর্ডারটি সম্পন্ন করুন।\n৪. আমাদের কাস্টমার রিপ্রেজেন্টেটিভ আপনার ফোনে কল করে অর্ডারটি নিশ্চিত করবেন।',
+      returnPolicy: '১. আমরা কোনো ত্রুটিপূর্ণ, ড্যামেজ বা ভুল পণ্য ডেলিভারি পেলে সম্পূর্ণ ফ্রিতে ৭ দিনের মধ্যে পরিবর্তন বা রিটার্ন করার সুযোগ দেই।\n২. রিটার্ন করার সময় পণ্যটি অক্ষত, অব্যবহৃত এবং মূল প্যাকেজিংসহ ফেরত দিতে হবে।\n৩. ডেলিভারি ম্যানের সামনে প্রোডাক্ট চেক করে রিসিভ করার জন্য বিশেষভাবে অনুরোধ করা হলো।'
+    };
+
+    container.querySelector('#ai-business-name').value = data.businessName || '';
+    container.querySelector('#ai-description').value = data.businessDescription || '';
+    container.querySelector('#ai-phones').value = data.phones || '';
+    container.querySelector('#ai-email').value = data.email || '';
+    container.querySelector('#ai-address').value = data.address || '';
+    container.querySelector('#ai-delivery-inside-charge').value = data.deliveryInsideCharge ?? '';
+    container.querySelector('#ai-delivery-inside-time').value = data.deliveryInsideTime || '';
+    container.querySelector('#ai-delivery-outside-charge').value = data.deliveryOutsideCharge ?? '';
+    container.querySelector('#ai-delivery-outside-time').value = data.deliveryOutsideTime || '';
+    container.querySelector('#ai-order-process').value = data.orderProcess || '';
+    container.querySelector('#ai-return-policy').value = data.returnPolicy || '';
+
+    // Save button event listener
+    container.querySelector('#save-ai-settings-btn').addEventListener('click', async () => {
+      const btn = container.querySelector('#save-ai-settings-btn');
+      btn.disabled = true;
+      btn.innerText = 'সংরক্ষণ করা হচ্ছে...';
+
+      const businessName = container.querySelector('#ai-business-name').value.trim();
+      const businessDescription = container.querySelector('#ai-description').value.trim();
+      const phones = container.querySelector('#ai-phones').value.trim();
+      const email = container.querySelector('#ai-email').value.trim();
+      const address = container.querySelector('#ai-address').value.trim();
+      const deliveryInsideCharge = Number(container.querySelector('#ai-delivery-inside-charge').value) || 0;
+      const deliveryInsideTime = container.querySelector('#ai-delivery-inside-time').value.trim();
+      const deliveryOutsideCharge = Number(container.querySelector('#ai-delivery-outside-charge').value) || 0;
+      const deliveryOutsideTime = container.querySelector('#ai-delivery-outside-time').value.trim();
+      const orderProcess = container.querySelector('#ai-order-process').value.trim();
+      const returnPolicy = container.querySelector('#ai-return-policy').value.trim();
+
+      try {
+        await setDoc(doc(db, 'system_settings', 'ai_bot'), {
+          businessName,
+          businessDescription,
+          phones,
+          email,
+          address,
+          deliveryInsideCharge,
+          deliveryInsideTime,
+          deliveryOutsideCharge,
+          deliveryOutsideTime,
+          orderProcess,
+          returnPolicy,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+
+        showToast('AI চ্যাটবট সেটিংস সফলভাবে সংরক্ষণ করা হয়েছে!', 'success');
+      } catch (err) {
+        console.error('Error saving AI settings:', err);
+        showToast('সেটিংস সংরক্ষণ করতে সমস্যা হয়েছে।', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = 'সেটিংস সেভ করুন';
+      }
+    });
+
+  } catch (err) {
+    console.error('Error loading AI settings page:', err);
+    container.innerHTML = `<p class="text-xs text-red-500">সেটিংস কন্টেন্ট লোড করতে সমস্যা হয়েছে।</p>`;
   }
 }
