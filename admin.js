@@ -845,18 +845,37 @@ async function showOrderDetailsModal(orderId, order) {
     <div class="bg-white w-full max-w-2xl max-h-[90vh] rounded-2xl overflow-y-auto p-6 shadow-2xl relative flex flex-col gap-4 text-left">
       <div class="flex items-center justify-between border-b pb-3 border-slate-200">
         <div>
-          <span class="text-xs font-semibold text-teal-700 bg-teal-50 px-2 py-1 rounded">অর্ডার নম্বর: #${escapeHtml(order.orderNumber)}</span>
-          <h2 class="text-lg font-bold text-slate-900 mt-2">অর্ডার বিবরণী</h2>
-          <p class="text-xs text-slate-500">তারিখ: ${new Date(order.createdAt).toLocaleString('bn-BD')}</p>
+          <h2 class="text-lg font-bold text-slate-900">অর্ডার বিবরণী</h2>
         </div>
         <div class="flex items-center gap-2">
+          <button id="download-order-img-btn" class="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-xs font-semibold transition shadow-sm cursor-pointer" title="মেমো ছবি হিসেবে ডাউনলোড করুন">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            <span>ছবি হিসেবে ডাউনলোড করুন</span>
+          </button>
           <button id="close-order-modal-btn" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition cursor-pointer">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
       </div>
 
-      <div id="order-printable-area" class="space-y-4 bg-white p-2">
+      <div id="order-printable-area" class="space-y-4 bg-white p-6 border border-slate-200 rounded-xl">
+        <!-- Brand Memo Header inside Printable Area -->
+        <div class="flex justify-between items-start border-b pb-3 border-slate-200">
+          <div>
+            <div class="flex items-center gap-1.5 text-teal-700 font-extrabold text-sm uppercase tracking-wide">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+              <span>বাংলামার্ট ই-কমার্স</span>
+            </div>
+            <h1 class="text-base font-extrabold text-slate-900 mt-1">অর্ডার বিবরণী মেমো</h1>
+          </div>
+          <div class="text-right">
+            <span class="text-xs font-semibold text-teal-700 bg-teal-50 px-2.5 py-1 rounded inline-block">অর্ডার নম্বর: #${escapeHtml(order.orderNumber)}</span>
+            <p class="text-[11px] text-slate-500 mt-2">তারিখ: ${new Date(order.createdAt).toLocaleString('bn-BD')}</p>
+          </div>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
           <!-- Customer & Shipping details -->
           <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
@@ -891,7 +910,7 @@ async function showOrderDetailsModal(orderId, order) {
             ${items.map(item => `
               <div class="p-3 flex items-center justify-between text-xs">
                 <div class="flex items-center gap-2">
-                  <img src="${getValidImageUrl(item.image)}" class="w-10 h-10 object-cover rounded-lg border border-slate-100" />
+                  <img src="${getValidImageUrl(item.image)}" class="w-10 h-10 object-cover rounded-lg border border-slate-100" referrerPolicy="no-referrer" />
                   <div>
                     <h4 class="font-semibold text-slate-800">${escapeHtml(item.name)}</h4>
                     <p class="text-slate-500 text-[10px]">মূল্য: ${formatPrice(item.price)} x ${item.qty}</p>
@@ -932,6 +951,49 @@ async function showOrderDetailsModal(orderId, order) {
 
   modal.querySelector('#close-order-modal-btn').addEventListener('click', () => {
     modal.remove();
+  });
+
+  // Download as Image logic
+  modal.querySelector('#download-order-img-btn').addEventListener('click', async () => {
+    const btn = modal.querySelector('#download-order-img-btn');
+    const originalContent = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `
+      <svg class="animate-spin -ml-1 mr-1.5 h-4 w-4 text-white inline-block" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      <span>ডাউনলোড হচ্ছে...</span>
+    `;
+
+    try {
+      const printableArea = modal.querySelector('#order-printable-area');
+      
+      // Use html2canvas to render the memo area to a crisp canvas image
+      const canvas = await html2canvas(printableArea, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false
+      });
+
+      const dataUrl = canvas.toDataURL('image/png');
+      const trigger = document.createElement('a');
+      trigger.href = dataUrl;
+      trigger.download = `order-${order.orderNumber || 'details'}.png`;
+      document.body.appendChild(trigger);
+      trigger.click();
+      document.body.removeChild(trigger);
+
+      showToast('ছবি সফলভাবে ডাউনলোড হয়েছে!', 'success');
+    } catch (err) {
+      console.error('Download as image error:', err);
+      showToast('ছবি ডাউনলোড করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = originalContent;
+    }
   });
 }
 
