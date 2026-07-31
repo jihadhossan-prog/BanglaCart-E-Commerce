@@ -38,8 +38,8 @@
 .hero-slide {
   position: relative;
   width: 100%;
-  aspect-ratio: 21 / 9;
-  min-height: 140px;
+  aspect-ratio: 21 / 8;
+  min-height: 110px;
   background-size: cover;
   background-position: center;
   display: flex;
@@ -50,10 +50,39 @@
 
 @media (min-width: 640px) {
   .hero-slide {
-    aspect-ratio: 24 / 9;
-    min-height: 220px;
-    padding: 24px;
+    aspect-ratio: 24 / 7;
+    min-height: 160px;
+    padding: 20px;
   }
+}
+
+/* Static Side Banner */
+.side-banner-container {
+  position: relative;
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px -2px rgba(0,0,0,0.05);
+  aspect-ratio: 21 / 8;
+}
+
+@media (min-width: 768px) {
+  .side-banner-container {
+    aspect-ratio: 12 / 7;
+    height: 100%;
+  }
+}
+
+.side-slide {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: flex-end;
+  padding: 16px;
+  border-radius: 16px;
 }
 
 .hero-overlay {
@@ -101,24 +130,41 @@
   box-shadow: 0 2px 6px rgba(15,118,110,0.25);
 }
 
-/* Load More "আরও" Text Link */
-.load-more-link {
+/* Load More "আরও" Button Redesign */
+.load-more-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  color: var(--brand-primary);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 12px;
-  border-radius: 6px;
-  text-decoration: none;
-  transition: all 0.15s ease;
+  justify-content: center;
+  gap: 6px;
+  background-color: #ffffff !important;
+  color: var(--brand-primary) !important;
+  border: 1.5px solid var(--brand-primary) !important;
+  border-radius: 4px !important; /* Sharp corners matching product card updated radius */
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  padding: 10px 24px !important;
+  min-height: 44px !important;
+  width: 100% !important;
+  max-width: 280px !important; /* Elegant card-like width proportion */
   cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+  text-decoration: none;
 }
 
-.load-more-link:hover {
-  background-color: var(--status-info-bg);
-  color: var(--brand-primary-hover);
+/* Dark mode overrides: use dark surface background instead of pure white */
+html.dark .load-more-btn {
+  background-color: var(--brand-surface) !important;
+}
+
+/* Hover state only on hover-capable pointer devices */
+@media (hover: hover) {
+  .load-more-btn:hover {
+    background-color: var(--brand-primary) !important;
+    color: #ffffff !important;
+    border-color: var(--brand-primary) !important;
+    box-shadow: 0 4px 12px rgba(15, 118, 110, 0.2) !important;
+  }
 }
 
 /* Chat Bubbles */
@@ -183,4 +229,85 @@
   padding: 2px 6px;
   border-radius: 2px;
   z-index: 2;
+}
+
+/* Carousel layout for category sections */
+.product-grid.carousel-active {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+  scroll-snap-type: x mandatory !important;
+  scroll-behavior: smooth;
+  gap: 12px;
+  scrollbar-width: none !important; /* hide scrollbar in Firefox */
+  padding-bottom: 8px; /* spacing at bottom */
+}
+
+.product-grid.carousel-active::-webkit-scrollbar {
+  display: none !important; /* hide scrollbar in Chrome/Safari */
+}
+
+/* Set widths of cards based on standard responsive column counts so pages align perfectly */
+.product-grid.carousel-active .product-card {
+  flex-shrink: 0 !important;
+  scroll-snap-align: start !important;
+  width: calc((100% - 12px) / 2) !important; /* 2 columns on mobile */
+}
+
+@media (min-width: 640px) {
+  .product-grid.carousel-active .product-card {
+    width: calc((100% - 32px) / 3) !important; /* 3 columns on tablet */
+  }
+  .product-grid.carousel-active {
+    gap: 16px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .product-grid.carousel-active .product-card {
+    width: calc((100% - 60px) / 4) !important; /* 4 columns on desktop lg */
+  }
+  .product-grid.carousel-active {
+    gap: 20px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .product-grid.carousel-active .product-card {
+    width: calc((100% - 96px) / 5) !important; /* 5 columns on desktop xl */
+  }
+  .product-grid.carousel-active {
+    gap: 24px;
+  }
+}
+
+/* Carousel Dots */
+.carousel-dots {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  margin-bottom: 12px;
+  width: 100%;
+}
+
+.carousel-dot {
+  width: 6px !important;
+  height: 6px !important;
+  min-width: 6px !important;
+  min-height: 6px !important;
+  border-radius: 50% !important;
+  background-color: var(--brand-muted, #94a3b8) !important;
+  opacity: 0.4 !important;
+  transition: opacity 0.2s ease, background-color 0.2s ease;
+  cursor: pointer;
+  border: none !important;
+  padding: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+.carousel-dot.active {
+  background-color: var(--brand-accent, #d97706) !important;
+  opacity: 1 !important;
 }

@@ -52,6 +52,12 @@ let categoriesList = [];
 let notificationUnsubscribe = null;
 let userNotifications = [];
 let lastColumns = 2; // Will be initialized on load
+let activeCarouselIntervals = [];
+
+function clearActiveCarouselIntervals() {
+  activeCarouselIntervals.forEach(id => clearInterval(id));
+  activeCarouselIntervals = [];
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Initialize lastColumns with the current grid column count
@@ -389,6 +395,7 @@ function updateUserNavDisplay(user, profile) {
 
 // Router & View Switcher
 async function renderView(tabName) {
+  clearActiveCarouselIntervals();
   activeTab = tabName;
   if (tabName !== 'checkout') {
     clearBuyNowItem();
@@ -572,7 +579,7 @@ function renderBannerSlider(container, banners) {
   `).join('');
 
   container.innerHTML = `
-    <div class="hero-slider-container relative aspect-[21/9] sm:aspect-[24/9] overflow-hidden rounded-2xl bg-slate-900">
+    <div class="hero-slider-container relative aspect-[21/8] sm:aspect-[24/7] overflow-hidden rounded-2xl bg-slate-900">
       ${slidesHtml}
       
       <!-- Controls -->
@@ -663,10 +670,17 @@ function renderBannerSlider(container, banners) {
 // Render Home View
 async function renderHomeView(container) {
   container.innerHTML = `
-    <!-- Hero Banner Slider -->
-    <section id="hero-slider-section" class="mb-5">
-      <div class="hero-slider-container skeleton h-36 sm:h-52 w-full"></div>
-    </section>
+    <!-- Hero Banner Slider & Side Banner Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5" id="hero-section-grid">
+      <!-- Hero Banner Slider -->
+      <section id="hero-slider-section" class="md:col-span-3">
+        <div class="hero-slider-container skeleton aspect-[21/8] sm:aspect-[24/7] w-full"></div>
+      </section>
+
+      <!-- Static Side Banner -->
+      <section id="hero-side-banner-section" class="md:col-span-1 hidden">
+      </section>
+    </div>
 
     <!-- Categories Horizontal Scroll -->
     <section class="mb-6">
@@ -688,7 +702,55 @@ async function renderHomeView(container) {
   fetchBanners().then(banners => {
     const sliderContainer = document.getElementById('hero-slider-section');
     if (!sliderContainer) return;
-    renderBannerSlider(sliderContainer, banners);
+
+    // Filter slider and side banners
+    const sliderBanners = banners.filter(b => b.type !== 'side');
+    const sideBanners = banners.filter(b => b.type === 'side');
+
+    renderBannerSlider(sliderContainer, sliderBanners);
+
+    const sideContainer = document.getElementById('hero-side-banner-section');
+    if (sideContainer) {
+      if (sideBanners.length > 0) {
+        const activeSideBanner = sideBanners[0];
+        sliderContainer.className = 'md:col-span-2';
+        sideContainer.className = 'md:col-span-1';
+        sideContainer.classList.remove('hidden');
+
+        sideContainer.innerHTML = `
+          <div class="side-banner-container relative aspect-[21/8] md:aspect-[12/7] overflow-hidden rounded-2xl bg-slate-900 shadow-xs cursor-pointer h-full" id="side-banner-click">
+            <div class="side-slide h-full w-full bg-cover bg-center flex items-end p-4 relative" style="background-image: url('${escapeHtml(activeSideBanner.imageUrl)}')">
+              <div class="hero-overlay"></div>
+              <div class="relative z-10 text-white">
+                ${activeSideBanner.title ? `<h2 class="text-sm md:text-base font-bold">${escapeHtml(activeSideBanner.title)}</h2>` : ''}
+                ${activeSideBanner.subtitle ? `<p class="text-[10px] md:text-xs opacity-95 mt-0.5">${escapeHtml(activeSideBanner.subtitle)}</p>` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+
+        if (activeSideBanner.linkedCategoryId) {
+          sideContainer.querySelector('#side-banner-click')?.addEventListener('click', () => {
+            selectedCategory = activeSideBanner.linkedCategoryId;
+            const chipsContainer = document.getElementById('category-chips-container');
+            if (chipsContainer) {
+              chipsContainer.querySelectorAll('.category-chip').forEach(c => {
+                if (c.dataset.cat === activeSideBanner.linkedCategoryId) {
+                  c.classList.add('active');
+                } else {
+                  c.classList.remove('active');
+                }
+              });
+            }
+            renderCategoryProductGrids(activeSideBanner.linkedCategoryId);
+            window.scrollTo({ top: 400, behavior: 'smooth' });
+          });
+        }
+      } else {
+        sliderContainer.className = 'md:col-span-3';
+        sideContainer.classList.add('hidden');
+      }
+    }
   });
 
   // Fetch Categories
@@ -716,6 +778,7 @@ async function renderHomeView(container) {
 
 // Render Category Product Grids (2 cols x 2 rows = 4 products max initially, plus "আরও" link)
 async function renderCategoryProductGrids(catFilter = 'সব') {
+  clearActiveCarouselIntervals();
   const wrapper = document.getElementById('category-sections-wrapper');
   if (!wrapper) return;
 
@@ -743,10 +806,14 @@ async function renderCategoryProductGrids(catFilter = 'সব') {
       </div>
     `;
 
-    section.innerHTML = headerHtml + `<div class="product-grid" id="grid-${cat.name}"></div>`;
+    section.innerHTML = headerHtml + `
+      <div class="product-grid carousel-active" id="grid-${cat.name}"></div>
+      <div class="carousel-dots" id="dots-${cat.name}"></div>
+    `;
     wrapper.appendChild(section);
 
     const gridContainer = section.querySelector(`#grid-${cat.name}`);
+    const dotsContainer = section.querySelector(`#dots-${cat.name}`);
 
     // Fetch initial products (2 rows x column count)
     const initialLimit = getCurrentGridColumns() * 2;
@@ -754,6 +821,7 @@ async function renderCategoryProductGrids(catFilter = 'সব') {
 
     if (products.length === 0) {
       gridContainer.innerHTML = `<div class="col-span-2 sm:col-span-3 text-center py-6 text-xs text-slate-400">এই ক্যাটাগরিতে কোনো প্রোডাক্ট পাওয়া যায়নি</div>`;
+      if (dotsContainer) dotsContainer.style.display = 'none';
       continue;
     }
 
@@ -761,14 +829,17 @@ async function renderCategoryProductGrids(catFilter = 'সব') {
       gridContainer.insertAdjacentHTML('beforeend', createProductCardHTML(p));
     });
 
-    // Mandatory "আরও" (Load More) link at bottom right of grid section if more items exist
+    // Setup dots for the horizontal carousel
+    setupCarouselDots(cat.name, gridContainer, dotsContainer, products.length);
+
+    // Mandatory "আরও" (Load More) button centered at bottom of grid section if more items exist
     if (hasMore) {
       const footerContainer = document.createElement('div');
-      footerContainer.className = 'flex justify-end mt-3 pt-2 border-t border-slate-100';
+      footerContainer.className = 'w-full flex justify-center mt-6 mb-4';
       
-      const loadMoreBtn = document.createElement('a');
-      loadMoreBtn.className = 'load-more-link';
-      loadMoreBtn.innerHTML = `আরও <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>`;
+      const loadMoreBtn = document.createElement('button');
+      loadMoreBtn.className = 'load-more-btn';
+      loadMoreBtn.innerHTML = `আরও <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>`;
 
       loadMoreBtn.addEventListener('click', () => {
         loadMoreCategoryProducts(cat.name, gridContainer, loadMoreBtn);
@@ -780,6 +851,87 @@ async function renderCategoryProductGrids(catFilter = 'সব') {
   }
 
   attachProductCardEvents();
+}
+
+// Setup horizontal carousel dots navigation
+function setupCarouselDots(catName, container, dotsContainer, totalProducts) {
+  if (!dotsContainer) return;
+  dotsContainer.innerHTML = '';
+
+  const columns = getCurrentGridColumns();
+  const totalPages = Math.ceil(totalProducts / columns);
+
+  if (totalPages <= 1) {
+    dotsContainer.style.display = 'none';
+    return;
+  }
+
+  dotsContainer.style.display = 'flex';
+
+  // Create dot buttons
+  for (let i = 0; i < totalPages; i++) {
+    const dot = document.createElement('button');
+    dot.className = `carousel-dot${i === 0 ? ' active' : ''}`;
+    dot.title = `Page ${i + 1}`;
+    dot.setAttribute('aria-label', `Go to page ${i + 1}`);
+    
+    dot.addEventListener('click', () => {
+      const targetScrollLeft = i * container.clientWidth;
+      container.scrollTo({ left: targetScrollLeft, behavior: 'smooth' });
+    });
+
+    dotsContainer.appendChild(dot);
+  }
+
+  // Monitor scroll to update active dot
+  const handleScroll = () => {
+    const scrollLeft = container.scrollLeft;
+    const width = container.clientWidth || 1;
+    const activeIndex = Math.min(
+      totalPages - 1,
+      Math.max(0, Math.round(scrollLeft / width))
+    );
+
+    const dots = dotsContainer.querySelectorAll('.carousel-dot');
+    dots.forEach((dot, idx) => {
+      if (idx === activeIndex) {
+        dot.classList.add('active');
+      } else {
+        dot.classList.remove('active');
+      }
+    });
+  };
+
+  container.addEventListener('scroll', handleScroll);
+  container._carouselScrollHandler = handleScroll;
+
+  // Clear existing interval on this container if any
+  if (container._carouselIntervalId) {
+    clearInterval(container._carouselIntervalId);
+  }
+
+  // Auto-scroll loop every 4 seconds (4000ms)
+  const intervalId = setInterval(() => {
+    // Self-destruct if the carousel has been detached or removed from DOM
+    if (!document.body.contains(container)) {
+      clearInterval(intervalId);
+      return;
+    }
+    const currentScrollLeft = container.scrollLeft;
+    const width = container.clientWidth || 1;
+    const activeIndex = Math.min(
+      totalPages - 1,
+      Math.max(0, Math.round(currentScrollLeft / width))
+    );
+    let nextIndex = activeIndex + 1;
+    if (nextIndex >= totalPages) {
+      nextIndex = 0;
+    }
+    container.scrollTo({ left: nextIndex * width, behavior: 'smooth' });
+  }, 4000);
+
+  container._carouselIntervalId = intervalId;
+  activeCarouselIntervals.push(intervalId);
 }
 
 // Live Search View

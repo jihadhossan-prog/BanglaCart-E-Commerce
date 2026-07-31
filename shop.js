@@ -313,16 +313,38 @@ export async function loadMoreCategoryProducts(categoryName, gridContainer, load
     const hasMore = newProducts.length === limitCount;
     categoryCursors[categoryName] = { lastDoc: newLastDoc, hasMore };
 
+    // Disable carousel mode and remove dots container when expanding to full grid
+    if (gridContainer.classList.contains('carousel-active')) {
+      gridContainer.classList.remove('carousel-active');
+      if (gridContainer._carouselScrollHandler) {
+        gridContainer.removeEventListener('scroll', gridContainer._carouselScrollHandler);
+        delete gridContainer._carouselScrollHandler;
+      }
+      if (gridContainer._carouselIntervalId) {
+        clearInterval(gridContainer._carouselIntervalId);
+        delete gridContainer._carouselIntervalId;
+      }
+      const dotsContainer = document.getElementById(`dots-${categoryName}`);
+      if (dotsContainer) {
+        dotsContainer.remove();
+      }
+    }
+
     // Append new products to grid
     newProducts.forEach(p => {
       gridContainer.insertAdjacentHTML('beforeend', createProductCardHTML(p));
     });
 
     if (!hasMore) {
-      loadMoreBtn.remove();
+      const parent = loadMoreBtn.parentElement;
+      if (parent && parent.classList.contains('flex')) {
+        parent.remove();
+      } else {
+        loadMoreBtn.remove();
+      }
     } else {
       loadMoreBtn.classList.remove('opacity-50', 'pointer-events-none');
-      loadMoreBtn.innerHTML = `আরও <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>`;
+      loadMoreBtn.innerHTML = `আরও <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>`;
     }
   } catch (err) {
     console.error('Error loading more products:', err);

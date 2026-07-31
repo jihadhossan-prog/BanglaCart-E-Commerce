@@ -453,44 +453,77 @@ async function renderBannersTab(container) {
     snap.forEach(d => banners.push({ id: d.id, ...d.data() }));
   }
 
+  const sliderBanners = banners.filter(b => b.type !== 'side');
+  const sideBanners = banners.filter(b => b.type === 'side');
+
+  const renderBannerItemHtml = (b) => {
+    return `
+      <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs flex flex-col">
+        <div class="h-36 bg-slate-100 overflow-hidden relative">
+          <img src="${escapeHtml(b.imageUrl)}" class="w-full h-full object-cover" />
+          <span class="absolute top-2 right-2 px-2 py-0.5 bg-slate-900/80 text-white font-bold text-[10px] rounded">
+            ${b.type === 'side' ? 'সাইড ব্যানার' : 'স্লাইডার ব্যানার'}
+          </span>
+        </div>
+        <div class="p-3 flex items-center justify-between gap-2 flex-1">
+          <div>
+            <h4 class="font-bold text-slate-800 text-xs">${escapeHtml(b.title || 'শিরোনাম নেই')}</h4>
+            <p class="text-[11px] text-slate-500 mt-0.5 line-clamp-1">${escapeHtml(b.subtitle || 'উপ-শিরোনাম নেই')}</p>
+            ${b.linkedCategoryId ? `<span class="inline-block mt-1 px-2 py-0.5 bg-teal-50 text-teal-700 font-semibold text-[10px] rounded">ক্যাটাগরি: ${escapeHtml(b.linkedCategoryId)}</span>` : ''}
+          </div>
+          <div class="flex items-center gap-1 flex-shrink-0">
+            <button class="edit-banner-btn px-2 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-md text-xs font-semibold" data-id="${b.id}">এডিট</button>
+            <button class="del-banner-btn px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded-md text-xs font-semibold" data-id="${b.id}">মুছুন</button>
+          </div>
+        </div>
+      </div>
+    `;
+  };
+
   container.innerHTML = `
-    <div class="space-y-4">
+    <div class="space-y-6">
       <div class="flex items-center justify-between">
         <div>
-          <h2 class="text-xl font-bold text-slate-800">স্লাইডার ব্যনার ম্যানেজমেন্ট (${banners.length})</h2>
-          <p class="text-xs text-slate-500 mt-0.5">এডমিন প্যানেল থেকে যোগ করা ব্যনারগুলোই কেবল হোমপেজ স্লাইডারে দেখাবে</p>
+          <h2 class="text-xl font-bold text-slate-800">ব্যানার ম্যানেজমেন্ট (${banners.length})</h2>
+          <p class="text-xs text-slate-500 mt-0.5">হোমপেজের স্লাইডার এবং সাইড ব্যানারগুলো এখান থেকে কন্ট্রোল করুন</p>
         </div>
         <button id="add-banner-btn" class="px-3 py-2 bg-teal-700 text-white font-semibold text-xs rounded-lg hover:bg-teal-800 transition">+ নতুন ব্যনার</button>
       </div>
 
-      ${banners.length === 0 ? `
-        <div class="bg-amber-50 border border-amber-200 text-amber-800 p-6 rounded-2xl text-center space-y-2">
-          <svg class="w-10 h-10 mx-auto text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-          <h3 class="font-bold text-sm">বর্তমানে কোনো স্লাইডার ব্যনার নেই</h3>
-          <p class="text-xs text-amber-700">হোমপেজে স্লাইডার ব্যনার দেখানোর জন্য উপরের '+ নতুন ব্যনার' বাটনে ক্লিক করে প্রথম ব্যনারটি যোগ করুন।</p>
-        </div>
-      ` : `
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          ${banners.map(b => `
-            <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs flex flex-col">
-              <div class="h-36 bg-slate-100 overflow-hidden relative">
-                <img src="${escapeHtml(b.imageUrl)}" class="w-full h-full object-cover" />
-              </div>
-              <div class="p-3 flex items-center justify-between gap-2 flex-1">
-                <div>
-                  <h4 class="font-bold text-slate-800 text-xs">${escapeHtml(b.title || 'শিরোনাম নেই')}</h4>
-                  <p class="text-[11px] text-slate-500 mt-0.5 line-clamp-1">${escapeHtml(b.subtitle || 'উপ-শিরোনাম নেই')}</p>
-                  ${b.linkedCategoryId ? `<span class="inline-block mt-1 px-2 py-0.5 bg-teal-50 text-teal-700 font-semibold text-[10px] rounded">ক্যাটাগরি লিঙ্কড</span>` : ''}
-                </div>
-                <div class="flex items-center gap-1">
-                  <button class="edit-banner-btn px-2 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-md text-xs font-semibold" data-id="${b.id}">এডিট</button>
-                  <button class="del-banner-btn px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded-md text-xs font-semibold" data-id="${b.id}">মুছুন</button>
-                </div>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      `}
+      <!-- Slider Banners Section -->
+      <div class="space-y-3">
+        <h3 class="text-sm font-bold text-slate-700 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-teal-600"></span>
+          স্লাইডার ব্যানারসমূহ (${sliderBanners.length})
+        </h3>
+        ${sliderBanners.length === 0 ? `
+          <div class="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl text-center text-xs">
+            কোনো স্লাইডার ব্যানার নেই। হোমপেজে স্লাইডার দেখানোর জন্য ব্যানার যোগ করুন।
+          </div>
+        ` : `
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            ${sliderBanners.map(b => renderBannerItemHtml(b)).join('')}
+          </div>
+        `}
+      </div>
+
+      <!-- Side Banners Section -->
+      <div class="space-y-3 pt-2">
+        <h3 class="text-sm font-bold text-slate-700 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+          সাইড ব্যানারসমূহ (${sideBanners.length})
+        </h3>
+        <p class="text-[11px] text-slate-500 -mt-2">সবচেয়ে নতুন যোগ করা সচল সাইড ব্যানারটি হোমপেজে স্লাইডারের পাশে দেখাবে।</p>
+        ${sideBanners.length === 0 ? `
+          <div class="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl text-center text-xs">
+            কোনো সাইড ব্যানার নেই। হোমপেজে স্লাইডারের ডানপাশে স্ট্যাটিক ব্যানার দেখাতে একটি ব্যানার যোগ করুন।
+          </div>
+        ` : `
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            ${sideBanners.map(b => renderBannerItemHtml(b)).join('')}
+          </div>
+        `}
+      </div>
     </div>
   `;
 
@@ -530,9 +563,17 @@ async function showBannerFormModal(banner = null) {
 
   modal.innerHTML = `
     <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl relative">
-      <h3 class="font-bold text-slate-800 text-base">${banner ? 'ব্যনার এডিট করুন' : 'নতুন স্লাইডার ব্যনার যোগ করুন'}</h3>
+      <h3 class="font-bold text-slate-800 text-base">${banner ? 'ব্যনার এডিট করুন' : 'নতুন ব্যনার যোগ করুন'}</h3>
 
       <form id="banner-form" class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold mb-1">ব্যনারের ধরন (Banner Type) *</label>
+          <select id="b-type" required class="w-full p-2 border border-slate-300 rounded-lg bg-white">
+            <option value="slider" ${!banner || banner.type !== 'side' ? 'selected' : ''}>স্লাইডার ব্যানার (Hero Slider Banner)</option>
+            <option value="side" ${banner?.type === 'side' ? 'selected' : ''}>সাইড ব্যানার (Static Side Banner)</option>
+          </select>
+        </div>
+
         <div>
           <label class="block font-semibold mb-1">ব্যনার ছবির URL *</label>
           <input type="text" id="b-url" required value="${escapeHtml(banner?.imageUrl || '')}" class="w-full p-2 border border-slate-300 rounded-lg" placeholder="https://..." />
@@ -573,6 +614,7 @@ async function showBannerFormModal(banner = null) {
 
   modal.querySelector('#banner-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const type = modal.querySelector('#b-type').value;
     const url = modal.querySelector('#b-url').value.trim();
     const title = modal.querySelector('#b-title').value.trim();
     const subtitle = modal.querySelector('#b-subtitle').value.trim();
@@ -581,6 +623,7 @@ async function showBannerFormModal(banner = null) {
     if (!url) return;
 
     const payload = {
+      type: type || 'slider',
       imageUrl: url,
       title: title,
       subtitle: subtitle,
