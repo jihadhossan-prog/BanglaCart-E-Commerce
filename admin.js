@@ -608,131 +608,215 @@ async function renderOrdersTab(container) {
   const orders = [];
   snap.forEach(d => orders.push({ id: d.id, ...d.data() }));
 
+  const toBanglaNumber = (num) => {
+    const banglaDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+    return num.toString().split('').map(char => banglaDigits[parseInt(char)] || char).join('');
+  };
+
   container.innerHTML = `
     <div class="space-y-4">
-      <h2 class="text-xl font-bold text-slate-800">অর্ডার ম্যানেজমেন্ট (${orders.length})</h2>
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <h2 class="text-xl font-bold text-slate-800" id="orders-title">অর্ডার ম্যানেজমেন্ট (${orders.length})</h2>
+        <div class="relative w-full sm:w-72">
+          <input type="text" id="order-search-input" placeholder="অর্ডার নম্বর দিয়ে খুঁজুন..." class="w-full text-xs pl-8 pr-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-teal-500 bg-white" />
+          <svg class="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+      </div>
 
       <div class="table-responsive">
         <table class="admin-table">
           <thead>
             <tr>
+              <th class="w-12 text-center">নং</th>
               <th>অর্ডার নম্বর</th>
+              <th>তারিখ</th>
               <th>গ্রাহক</th>
               <th>মূল্য</th>
               <th>পেমেন্ট মেথড</th>
               <th>পেমেন্ট স্ট্যাটাস</th>
               <th>ডেলিভারি স্ট্যাটাস</th>
-              <th>অ্যাকশন</th>
+              <th class="text-center">অ্যাকশন</th>
             </tr>
           </thead>
-          <tbody>
-            ${orders.map(o => `
-              <tr>
-                <td class="font-bold text-teal-700">${escapeHtml(o.orderNumber)}</td>
-                <td>
-                  <div class="font-semibold text-slate-800">${escapeHtml(o.customerInfo?.fullName || 'N/A')}</div>
-                  <div class="text-[10px] text-slate-500">${escapeHtml(o.customerInfo?.phone || '')}</div>
-                </td>
-                <td class="font-bold">${formatPrice(o.grandTotal)}</td>
-                <td class="uppercase font-semibold text-xs">${escapeHtml(o.paymentMethod)} ${o.trxId ? `<span class="text-[10px] text-teal-600 block">Trx: ${escapeHtml(o.trxId)}</span>` : ''}</td>
-                <td>
-                  <select class="pay-status-sel text-xs border border-slate-300 rounded px-1.5 py-1" data-id="${o.id}">
-                    <option value="Unpaid" ${o.paymentStatus === 'Unpaid' ? 'selected' : ''}>Unpaid</option>
-                    <option value="Pending Verification" ${o.paymentStatus === 'Pending Verification' ? 'selected' : ''}>Pending</option>
-                    <option value="Paid" ${o.paymentStatus === 'Paid' ? 'selected' : ''}>Paid</option>
-                  </select>
-                </td>
-                <td>
-                  <select class="del-status-sel text-xs border border-slate-300 rounded px-1.5 py-1" data-id="${o.id}">
-                    <option value="Processing" ${o.orderStatus === 'Processing' ? 'selected' : ''}>Processing</option>
-                    <option value="Shipped" ${o.orderStatus === 'Shipped' ? 'selected' : ''}>Shipped</option>
-                    <option value="Out for Delivery" ${o.orderStatus === 'Out for Delivery' ? 'selected' : ''}>Out for Delivery</option>
-                    <option value="Delivered" ${o.orderStatus === 'Delivered' ? 'selected' : ''}>Delivered</option>
-                    <option value="Cancelled" ${o.orderStatus === 'Cancelled' ? 'selected' : ''}>Cancelled</option>
-                  </select>
-                </td>
-                <td>
-                  <button class="view-order-detail-btn px-2 py-1 bg-teal-50 text-teal-700 rounded text-xs font-bold" data-id="${o.id}">ডিটেইলস</button>
-                </td>
-              </tr>
-            `).join('')}
+          <tbody id="orders-table-body">
+            <!-- Dynamically populated rows -->
           </tbody>
         </table>
       </div>
     </div>
   `;
 
-  container.querySelectorAll('.pay-status-sel').forEach(sel => {
-    sel.addEventListener('change', async () => {
-      const orderId = sel.dataset.id;
-      const newStatus = sel.value;
-      await updateDoc(doc(db, 'orders', orderId), { paymentStatus: newStatus });
-      showToast('পেমেন্ট স্ট্যাটাস আপডেট করা হয়েছে', 'success');
+  const tbody = container.querySelector('#orders-table-body');
+  const titleEl = container.querySelector('#orders-title');
+  const searchInput = container.querySelector('#order-search-input');
 
-      try {
-        const orderSnap = await getDoc(doc(db, 'orders', orderId));
-        if (orderSnap.exists()) {
-          const oData = orderSnap.data();
-          if (oData.userId && oData.userId !== 'guest') {
-            await addDoc(collection(db, 'notifications'), {
-              userId: oData.userId,
-              title: `পেমেন্ট আপডেট (#${oData.orderNumber})`,
-              body: `আপনার অর্ডারের পেমেন্ট স্ট্যাটাস পরিবর্তন হয়ে "${newStatus}" হয়েছে।`,
-              createdAt: new Date().toISOString(),
-              read: false
-            });
+  function renderTableRows(ordersList) {
+    titleEl.textContent = `অর্ডার ম্যানেজমেন্ট (${ordersList.length})`;
+
+    if (ordersList.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="9" class="text-center py-8 text-slate-400 text-xs">কোনো অর্ডার পাওয়া যায়নি</td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = ordersList.map((o, idx) => {
+      const serialNo = toBanglaNumber(idx + 1);
+      const dateStr = o.createdAt ? new Date(o.createdAt).toLocaleString('bn-BD') : 'N/A';
+
+      return `
+        <tr>
+          <td class="text-center font-medium text-slate-500">${serialNo}</td>
+          <td class="font-bold text-teal-700">${escapeHtml(o.orderNumber || '')}</td>
+          <td class="text-slate-600 text-xs whitespace-nowrap">${escapeHtml(dateStr)}</td>
+          <td>
+            <div class="font-semibold text-slate-800">${escapeHtml(o.customerInfo?.fullName || 'N/A')}</div>
+            <div class="text-[10px] text-slate-500">${escapeHtml(o.customerInfo?.phone || '')}</div>
+          </td>
+          <td class="font-bold">${formatPrice(o.grandTotal)}</td>
+          <td class="uppercase font-semibold text-xs">${escapeHtml(o.paymentMethod || '')} ${o.trxId ? `<span class="text-[10px] text-teal-600 block">Trx: ${escapeHtml(o.trxId)}</span>` : ''}</td>
+          <td>
+            <select class="pay-status-sel text-xs border border-slate-300 rounded px-1.5 py-1" data-id="${o.id}">
+              <option value="Unpaid" ${o.paymentStatus === 'Unpaid' ? 'selected' : ''}>Unpaid</option>
+              <option value="Pending Verification" ${o.paymentStatus === 'Pending Verification' ? 'selected' : ''}>Pending</option>
+              <option value="Paid" ${o.paymentStatus === 'Paid' ? 'selected' : ''}>Paid</option>
+            </select>
+          </td>
+          <td>
+            <select class="del-status-sel text-xs border border-slate-300 rounded px-1.5 py-1" data-id="${o.id}">
+              <option value="Processing" ${o.orderStatus === 'Processing' ? 'selected' : ''}>Processing</option>
+              <option value="Shipped" ${o.orderStatus === 'Shipped' ? 'selected' : ''}>Shipped</option>
+              <option value="Out for Delivery" ${o.orderStatus === 'Out for Delivery' ? 'selected' : ''}>Out for Delivery</option>
+              <option value="Delivered" ${o.orderStatus === 'Delivered' ? 'selected' : ''}>Delivered</option>
+              <option value="Cancelled" ${o.orderStatus === 'Cancelled' ? 'selected' : ''}>Cancelled</option>
+            </select>
+          </td>
+          <td>
+            <div class="flex items-center justify-center gap-1.5">
+              <button class="view-order-detail-btn px-2 py-1 bg-teal-50 text-teal-700 hover:bg-teal-100 rounded text-xs font-bold transition" data-id="${o.id}">ডিটেইলস</button>
+              <button class="delete-order-btn p-1 bg-red-50 text-red-600 hover:bg-red-100 rounded transition" data-id="${o.id}" title="অর্ডার মুছুন">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    attachRowEventListeners(ordersList);
+  }
+
+  function attachRowEventListeners(ordersList) {
+    tbody.querySelectorAll('.pay-status-sel').forEach(sel => {
+      sel.addEventListener('change', async () => {
+        const orderId = sel.dataset.id;
+        const newStatus = sel.value;
+        await updateDoc(doc(db, 'orders', orderId), { paymentStatus: newStatus });
+        showToast('পেমেন্ট স্ট্যাটাস আপডেট করা হয়েছে', 'success');
+
+        try {
+          const orderSnap = await getDoc(doc(db, 'orders', orderId));
+          if (orderSnap.exists()) {
+            const oData = orderSnap.data();
+            if (oData.userId && oData.userId !== 'guest') {
+              await addDoc(collection(db, 'notifications'), {
+                userId: oData.userId,
+                title: `পেমেন্ট আপডেট (#${oData.orderNumber})`,
+                body: `আপনার অর্ডারের পেমেন্ট স্ট্যাটাস পরিবর্তন হয়ে "${newStatus}" হয়েছে।`,
+                createdAt: new Date().toISOString(),
+                read: false
+              });
+            }
           }
+        } catch (err) {
+          console.error('Error creating notification on payment change:', err);
         }
-      } catch (err) {
-        console.error('Error creating notification on payment change:', err);
-      }
+      });
     });
-  });
 
-  container.querySelectorAll('.del-status-sel').forEach(sel => {
-    sel.addEventListener('change', async () => {
-      const orderId = sel.dataset.id;
-      const newStatus = sel.value;
-      await updateDoc(doc(db, 'orders', orderId), { orderStatus: newStatus });
-      showToast('ডেলিভারি স্ট্যাটাস আপডেট করা হয়েছে', 'success');
+    tbody.querySelectorAll('.del-status-sel').forEach(sel => {
+      sel.addEventListener('change', async () => {
+        const orderId = sel.dataset.id;
+        const newStatus = sel.value;
+        await updateDoc(doc(db, 'orders', orderId), { orderStatus: newStatus });
+        showToast('ডেলিভারি স্ট্যাটাস আপডেট করা হয়েছে', 'success');
 
-      try {
-        const orderSnap = await getDoc(doc(db, 'orders', orderId));
-        if (orderSnap.exists()) {
-          const oData = orderSnap.data();
-          if (oData.userId && oData.userId !== 'guest') {
-            await addDoc(collection(db, 'notifications'), {
-              userId: oData.userId,
-              title: `অর্ডার ডেলিভারি আপডেট (#${oData.orderNumber})`,
-              body: `আপনার অর্ডারের ডেলিভারি স্ট্যাটাস পরিবর্তন হয়ে "${newStatus}" হয়েছে।`,
-              createdAt: new Date().toISOString(),
-              read: false
-            });
+        try {
+          const orderSnap = await getDoc(doc(db, 'orders', orderId));
+          if (orderSnap.exists()) {
+            const oData = orderSnap.data();
+            if (oData.userId && oData.userId !== 'guest') {
+              await addDoc(collection(db, 'notifications'), {
+                userId: oData.userId,
+                title: `অর্ডার ডেলিভারি আপডেট (#${oData.orderNumber})`,
+                body: `আপনার অর্ডারের ডেলিভারি স্ট্যাটাস পরিবর্তন হয়ে "${newStatus}" হয়েছে।`,
+                createdAt: new Date().toISOString(),
+                read: false
+              });
+            }
           }
+        } catch (err) {
+          console.error('Error creating notification on delivery change:', err);
         }
-      } catch (err) {
-        console.error('Error creating notification on delivery change:', err);
-      }
+      });
     });
+
+    tbody.querySelectorAll('.view-order-detail-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const orderId = btn.dataset.id;
+        try {
+          const orderSnap = await getDoc(doc(db, 'orders', orderId));
+          if (orderSnap.exists()) {
+            await showOrderDetailsModal(orderSnap.id, orderSnap.data());
+          } else {
+            showToast('অর্ডার পাওয়া যায়নি', 'error');
+          }
+        } catch (err) {
+          console.error('Error fetching order details:', err);
+          showToast('অর্ডারের তথ্য লোড করা যায়নি', 'error');
+        }
+      });
+    });
+
+    tbody.querySelectorAll('.delete-order-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const orderId = btn.dataset.id;
+        if (!confirm('এই অর্ডারটি মুছে ফেলা হবে, নিশ্চিত?')) return;
+
+        try {
+          await deleteDoc(doc(db, 'orders', orderId));
+          showToast('অর্ডার সফলভাবে মুছে ফেলা হয়েছে', 'success');
+          renderAdminTab('orders');
+        } catch (err) {
+          console.error('Error deleting order:', err);
+          showToast('অর্ডার মুছতে সমস্যা হয়েছে', 'error');
+        }
+      });
+    });
+  }
+
+  // Set up real-time search filtering
+  searchInput.addEventListener('input', () => {
+    const queryStr = searchInput.value.toLowerCase().trim();
+    if (!queryStr) {
+      renderTableRows(orders);
+    } else {
+      const filtered = orders.filter(o => {
+        const orderNum = (o.orderNumber || '').toLowerCase();
+        return orderNum.includes(queryStr);
+      });
+      renderTableRows(filtered);
+    }
   });
 
-  // Attach event listener to Details button
-  container.querySelectorAll('.view-order-detail-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const orderId = btn.dataset.id;
-      try {
-        const orderSnap = await getDoc(doc(db, 'orders', orderId));
-        if (orderSnap.exists()) {
-          await showOrderDetailsModal(orderSnap.id, orderSnap.data());
-        } else {
-          showToast('অর্ডার পাওয়া যায়নি', 'error');
-        }
-      } catch (err) {
-        console.error('Error fetching order details:', err);
-        showToast('অর্ডারের তথ্য লোড করা যায়নি', 'error');
-      }
-    });
-  });
+  // Initial render
+  renderTableRows(orders);
 }
 
 // Order Details Modal
@@ -1019,17 +1103,56 @@ function renderAdminChatTab(container) {
     snapshot.forEach(d => {
       const c = d.data();
       const item = document.createElement('div');
-      item.className = 'p-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer text-xs';
+      item.className = 'p-3 border-b border-slate-100 hover:bg-slate-50 cursor-pointer text-xs relative group flex items-center justify-between';
       item.innerHTML = `
-        <div class="flex items-center justify-between font-bold text-slate-800">
-          <span>${escapeHtml(c.userName || 'গ্রাহক')}</span>
-          ${c.unreadAdmin ? `<span class="w-2 h-2 rounded-full bg-red-500"></span>` : ''}
+        <div class="flex-1 min-w-0 pr-8">
+          <div class="flex items-center justify-between font-bold text-slate-800">
+            <span class="truncate">${escapeHtml(c.userName || 'গ্রাহক')}</span>
+            ${c.unreadAdmin ? `<span class="w-2 h-2 rounded-full bg-red-500 flex-shrink-0 ml-1"></span>` : ''}
+          </div>
+          <p class="text-slate-500 truncate mt-0.5">${escapeHtml(c.lastMessage || '')}</p>
         </div>
-        <p class="text-slate-500 truncate mt-0.5">${escapeHtml(c.lastMessage || '')}</p>
+        <button class="delete-chat-btn absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-600 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-150" title="চ্যাট মুছুন">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
       `;
 
       item.addEventListener('click', () => {
         openAdminChatThread(d.id, c, container.querySelector('#admin-chat-thread'));
+      });
+
+      const delBtn = item.querySelector('.delete-chat-btn');
+      delBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!confirm('এই চ্যাট মুছে ফেলা হবে, নিশ্চিত?')) return;
+
+        try {
+          // Delete messages subcollection
+          const msgSnap = await getDocs(collection(db, 'chats', d.id, 'messages'));
+          const delPromises = msgSnap.docs.map(mDoc => deleteDoc(mDoc.ref));
+          await Promise.all(delPromises);
+
+          // Delete parent chat doc
+          await deleteDoc(doc(db, 'chats', d.id));
+
+          showToast('চ্যাট সফলভাবে মুছে ফেলা হয়েছে', 'success');
+
+          // Clear open thread if deleted
+          const threadBox = container.querySelector('#admin-chat-thread');
+          if (threadBox && threadBox.dataset.activeChatId === d.id) {
+            delete threadBox.dataset.activeChatId;
+            threadBox.innerHTML = `
+              <div class="flex-1 flex items-center justify-center p-6 text-slate-400 text-xs text-center">
+                বাঁদিকের তালিকা থেকে যেকোনো গ্রাহক নির্বাচন করুন
+              </div>
+            `;
+          }
+        } catch (err) {
+          console.error('Error deleting chat:', err);
+          showToast('চ্যাট মুছতে সমস্যা হয়েছে', 'error');
+        }
       });
 
       listContainer.appendChild(item);
@@ -1038,6 +1161,7 @@ function renderAdminChatTab(container) {
 }
 
 function openAdminChatThread(chatId, chatMeta, threadBox) {
+  threadBox.dataset.activeChatId = chatId;
   threadBox.innerHTML = `
     <div class="p-3 border-b border-slate-200 bg-white font-bold text-xs text-slate-800">
       ${escapeHtml(chatMeta.userName || 'গ্রাহক')} - ${escapeHtml(chatMeta.userEmail || '')}

@@ -37,16 +37,6 @@ export function initLiveChat(chatContainer, statusBadge) {
 
   const chatId = user.uid;
 
-  // Set chat metadata document
-  setDoc(doc(db, 'chats', chatId), {
-    userId: user.uid,
-    userName: profile?.fullName || user.displayName || 'গ্রাহক',
-    userEmail: user.email || '',
-    userPhone: profile?.phone || '',
-    lastUpdated: new Date().toISOString(),
-    unreadAdmin: true
-  }, { merge: true });
-
   // Listen to messages in real time
   const messagesRef = collection(db, 'chats', chatId, 'messages');
   const q = query(messagesRef, orderBy('timestamp', 'asc'));
@@ -116,19 +106,24 @@ export async function sendChatMessage(text, imageUrl = '') {
   const messagesRef = collection(db, 'chats', chatId, 'messages');
 
   try {
+    const profile = getUserProfile();
+    // Ensure parent chat metadata document exists/is updated
+    await setDoc(doc(db, 'chats', chatId), {
+      userId: user.uid,
+      userName: profile?.fullName || user.displayName || 'গ্রাহক',
+      userEmail: user.email || '',
+      userPhone: profile?.phone || '',
+      lastMessage: text.trim() || 'ছবি সংযুক্ত করা হয়েছে',
+      lastUpdated: new Date().toISOString(),
+      unreadAdmin: true
+    }, { merge: true });
+
     await addDoc(messagesRef, {
       sender: 'user',
       senderId: user.uid,
       text: text.trim(),
       imageUrl: imageUrl,
       timestamp: new Date().toISOString()
-    });
-
-    // Update parent chat doc
-    await updateDoc(doc(db, 'chats', chatId), {
-      lastMessage: text.trim() || 'ছবি সংযুক্ত করা হয়েছে',
-      lastUpdated: new Date().toISOString(),
-      unreadAdmin: true
     });
   } catch (err) {
     console.error('Error sending message:', err);
