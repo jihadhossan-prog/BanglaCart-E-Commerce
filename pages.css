@@ -251,7 +251,6 @@ html.dark .load-more-btn {
 
 .product-grid.carousel-active.dragging .product-card {
   user-select: none !important;
-  pointer-events: none !important;
 }
 
 .product-grid.carousel-active::-webkit-scrollbar {

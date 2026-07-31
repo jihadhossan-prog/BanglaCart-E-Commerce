@@ -793,6 +793,15 @@ async function renderCategoryProductGrids(catFilter = 'সব') {
     catsToRender = [{ name: 'সব' }];
   }
 
+  // Fetch banners to check for mid-page banners
+  let midBanners = [];
+  try {
+    const allBanners = await fetchBanners();
+    midBanners = allBanners.filter(b => b.type === 'mid');
+  } catch (err) {
+    console.error('Error fetching banners for mid-page display:', err);
+  }
+
   for (const cat of catsToRender) {
     const section = document.createElement('section');
     section.className = 'bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/80 shadow-2xs';
@@ -822,6 +831,40 @@ async function renderCategoryProductGrids(catFilter = 'সব') {
     if (products.length === 0) {
       gridContainer.innerHTML = `<div class="col-span-2 sm:col-span-3 text-center py-6 text-xs text-slate-400">এই ক্যাটাগরিতে কোনো প্রোডাক্ট পাওয়া যায়নি</div>`;
       if (dotsContainer) dotsContainer.style.display = 'none';
+      
+      // Still check and render mid-page banners if configured after this empty category
+      const matchingMidBanners = midBanners.filter(b => b.displayAfterCategory && b.displayAfterCategory.trim() === cat.name.trim());
+      for (const mb of matchingMidBanners) {
+        const midBannerDiv = document.createElement('div');
+        midBannerDiv.className = 'mid-banner-wrapper my-6 w-full relative overflow-hidden rounded-2xl bg-slate-900 shadow-xs cursor-pointer group';
+        midBannerDiv.innerHTML = `
+          <div class="relative w-full aspect-[21/6] md:aspect-[21/5] min-h-[140px] flex items-center p-6 sm:p-8 md:p-12 bg-cover bg-center transition duration-500 hover:scale-[1.01]" style="background-image: url('${escapeHtml(mb.imageUrl)}')">
+            <div class="hero-overlay bg-black/35 absolute inset-0"></div>
+            <div class="relative z-10 text-white max-w-lg">
+              ${mb.title ? `<h2 class="text-lg sm:text-2xl md:text-3xl font-extrabold tracking-tight drop-shadow-md">${escapeHtml(mb.title)}</h2>` : ''}
+              ${mb.subtitle ? `<p class="text-xs sm:text-sm md:text-base opacity-95 mt-1 sm:mt-2 font-medium drop-shadow-sm">${escapeHtml(mb.subtitle)}</p>` : ''}
+            </div>
+          </div>
+        `;
+        if (mb.linkedCategoryId) {
+          midBannerDiv.addEventListener('click', () => {
+            selectedCategory = mb.linkedCategoryId;
+            const chipsContainer = document.getElementById('category-chips-container');
+            if (chipsContainer) {
+              chipsContainer.querySelectorAll('.category-chip').forEach(c => {
+                if (c.dataset.cat === mb.linkedCategoryId) {
+                  c.classList.add('active');
+                } else {
+                  c.classList.remove('active');
+                }
+              });
+            }
+            renderCategoryProductGrids(mb.linkedCategoryId);
+            window.scrollTo({ top: 400, behavior: 'smooth' });
+          });
+        }
+        wrapper.appendChild(midBannerDiv);
+      }
       continue;
     }
 
@@ -847,6 +890,40 @@ async function renderCategoryProductGrids(catFilter = 'সব') {
 
       footerContainer.appendChild(loadMoreBtn);
       section.appendChild(footerContainer);
+    }
+
+    // Check and render mid-page banners if configured after this category
+    const matchingMidBanners = midBanners.filter(b => b.displayAfterCategory && b.displayAfterCategory.trim() === cat.name.trim());
+    for (const mb of matchingMidBanners) {
+      const midBannerDiv = document.createElement('div');
+      midBannerDiv.className = 'mid-banner-wrapper my-6 w-full relative overflow-hidden rounded-2xl bg-slate-900 shadow-xs cursor-pointer group';
+      midBannerDiv.innerHTML = `
+        <div class="relative w-full aspect-[21/6] md:aspect-[21/5] min-h-[140px] flex items-center p-6 sm:p-8 md:p-12 bg-cover bg-center transition duration-500 hover:scale-[1.01]" style="background-image: url('${escapeHtml(mb.imageUrl)}')">
+          <div class="hero-overlay bg-black/35 absolute inset-0"></div>
+          <div class="relative z-10 text-white max-w-lg">
+            ${mb.title ? `<h2 class="text-lg sm:text-2xl md:text-3xl font-extrabold tracking-tight drop-shadow-md">${escapeHtml(mb.title)}</h2>` : ''}
+            ${mb.subtitle ? `<p class="text-xs sm:text-sm md:text-base opacity-95 mt-1 sm:mt-2 font-medium drop-shadow-sm">${escapeHtml(mb.subtitle)}</p>` : ''}
+          </div>
+        </div>
+      `;
+      if (mb.linkedCategoryId) {
+        midBannerDiv.addEventListener('click', () => {
+          selectedCategory = mb.linkedCategoryId;
+          const chipsContainer = document.getElementById('category-chips-container');
+          if (chipsContainer) {
+            chipsContainer.querySelectorAll('.category-chip').forEach(c => {
+              if (c.dataset.cat === mb.linkedCategoryId) {
+                c.classList.add('active');
+              } else {
+                c.classList.remove('active');
+              }
+            });
+          }
+          renderCategoryProductGrids(mb.linkedCategoryId);
+          window.scrollTo({ top: 400, behavior: 'smooth' });
+        });
+      }
+      wrapper.appendChild(midBannerDiv);
     }
   }
 
@@ -876,15 +953,16 @@ function enableCarouselDrag(container) {
 
   // Mouse Events
   container.addEventListener('mousedown', (e) => {
+    if (!container.classList.contains('carousel-active')) return;
     isDown = true;
     container._isDown = true;
-    container.classList.add('dragging');
     startX = e.pageX - container.offsetLeft;
     scrollLeft = container.scrollLeft;
     hasDragged = false;
   });
 
   container.addEventListener('mouseleave', () => {
+    if (!container.classList.contains('carousel-active')) return;
     if (!isDown) return;
     isDown = false;
     container._isDown = false;
@@ -893,6 +971,7 @@ function enableCarouselDrag(container) {
   });
 
   container.addEventListener('mouseup', (e) => {
+    if (!container.classList.contains('carousel-active')) return;
     if (!isDown) return;
     isDown = false;
     container._isDown = false;
@@ -912,37 +991,62 @@ function enableCarouselDrag(container) {
   });
 
   container.addEventListener('mousemove', (e) => {
+    if (!container.classList.contains('carousel-active')) return;
     if (!isDown) return;
-    e.preventDefault();
     const x = e.pageX - container.offsetLeft;
     const walk = (x - startX) * 1.5; // Drag speed multiplier
-    if (Math.abs(walk) > 5) {
-      hasDragged = true;
+    if (Math.abs(walk) > 15) {
+      if (!hasDragged) {
+        hasDragged = true;
+        container.classList.add('dragging');
+      }
+      e.preventDefault();
+      container.scrollLeft = scrollLeft - walk;
     }
-    container.scrollLeft = scrollLeft - walk;
   });
 
   // Touch Events for mobile swipe/drag
   container.addEventListener('touchstart', (e) => {
+    if (!container.classList.contains('carousel-active')) return;
     container._isDown = true;
-    container.classList.add('dragging');
     const touch = e.touches[0];
     startX = touch.pageX - container.offsetLeft;
     scrollLeft = container.scrollLeft;
+    hasDragged = false;
   }, { passive: true });
 
   container.addEventListener('touchend', () => {
+    if (!container.classList.contains('carousel-active')) return;
+    if (!container._isDown) return;
     container._isDown = false;
     container.classList.remove('dragging');
     snapToNearestCard(container);
+
+    if (hasDragged) {
+      const preventClick = (clickEvent) => {
+        clickEvent.stopImmediatePropagation();
+        clickEvent.preventDefault();
+      };
+      container.addEventListener('click', preventClick, true);
+      setTimeout(() => {
+        container.removeEventListener('click', preventClick, true);
+      }, 50);
+    }
   }, { passive: true });
 
   container.addEventListener('touchmove', (e) => {
+    if (!container.classList.contains('carousel-active')) return;
     if (!container._isDown) return;
     const touch = e.touches[0];
     const x = touch.pageX - container.offsetLeft;
     const walk = (x - startX) * 1.2;
-    container.scrollLeft = scrollLeft - walk;
+    if (Math.abs(walk) > 20) {
+      if (!hasDragged) {
+        hasDragged = true;
+        container.classList.add('dragging');
+      }
+      container.scrollLeft = scrollLeft - walk;
+    }
   }, { passive: true });
 }
 
@@ -1006,7 +1110,7 @@ function setupCarouselDots(catName, container, dotsContainer, totalProducts) {
     clearInterval(container._carouselIntervalId);
   }
 
-  // Auto-scroll loop every 3 seconds (3000ms) - advances by exactly ONE product at a time
+  // Auto-scroll loop every 5 seconds (5000ms) - advances by exactly ONE product at a time
   const intervalId = setInterval(() => {
     // Self-destruct if the carousel has been detached or removed from DOM
     if (!document.body.contains(container)) {
@@ -1042,7 +1146,7 @@ function setupCarouselDots(catName, container, dotsContainer, totalProducts) {
       const nextIndex = currentIndex + 1;
       container.scrollTo({ left: nextIndex * stepWidth, behavior: 'smooth' });
     }
-  }, 3000);
+  }, 5000);
 
   container._carouselIntervalId = intervalId;
   activeCarouselIntervals.push(intervalId);

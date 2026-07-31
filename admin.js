@@ -511,16 +511,23 @@ async function renderBannersTab(container) {
     snap.forEach(d => banners.push({ id: d.id, ...d.data() }));
   }
 
-  const sliderBanners = banners.filter(b => b.type !== 'side');
+  const sliderBanners = banners.filter(b => b.type !== 'side' && b.type !== 'mid');
   const sideBanners = banners.filter(b => b.type === 'side');
+  const midBanners = banners.filter(b => b.type === 'mid');
 
   const renderBannerItemHtml = (b) => {
+    let typeText = 'স্লাইডার ব্যানার';
+    if (b.type === 'side') {
+      typeText = 'সাইড ব্যানার';
+    } else if (b.type === 'mid') {
+      typeText = 'মাঝের ব্যানার';
+    }
     return `
       <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs flex flex-col">
         <div class="h-36 bg-slate-100 overflow-hidden relative">
           <img src="${escapeHtml(b.imageUrl)}" class="w-full h-full object-cover" />
           <span class="absolute top-2 right-2 px-2 py-0.5 bg-slate-900/80 text-white font-bold text-[10px] rounded">
-            ${b.type === 'side' ? 'সাইড ব্যানার' : 'স্লাইডার ব্যানার'}
+            ${typeText}
           </span>
         </div>
         <div class="p-3 flex items-center justify-between gap-2 flex-1">
@@ -528,6 +535,7 @@ async function renderBannersTab(container) {
             <h4 class="font-bold text-slate-800 text-xs">${escapeHtml(b.title || 'শিরোনাম নেই')}</h4>
             <p class="text-[11px] text-slate-500 mt-0.5 line-clamp-1">${escapeHtml(b.subtitle || 'উপ-শিরোনাম নেই')}</p>
             ${b.linkedCategoryId ? `<span class="inline-block mt-1 px-2 py-0.5 bg-teal-50 text-teal-700 font-semibold text-[10px] rounded">ক্যাটাগরি: ${escapeHtml(b.linkedCategoryId)}</span>` : ''}
+            ${b.type === 'mid' && b.displayAfterCategory ? `<div class="mt-1 text-[10px] text-slate-600 font-medium">অবস্থান: ${escapeHtml(b.displayAfterCategory)} এর পরে</div>` : ''}
           </div>
           <div class="flex items-center gap-1 flex-shrink-0">
             <button class="edit-banner-btn px-2 py-1 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-md text-xs font-semibold" data-id="${b.id}">এডিট</button>
@@ -543,7 +551,7 @@ async function renderBannersTab(container) {
       <div class="flex items-center justify-between">
         <div>
           <h2 class="text-xl font-bold text-slate-800">ব্যানার ম্যানেজমেন্ট (${banners.length})</h2>
-          <p class="text-xs text-slate-500 mt-0.5">হোমপেজের স্লাইডার এবং সাইড ব্যানারগুলো এখান থেকে কন্ট্রোল করুন</p>
+          <p class="text-xs text-slate-500 mt-0.5">হোমপেজের স্লাইডার, সাইড এবং মাঝের ব্যানারগুলো এখান থেকে কন্ট্রোল করুন</p>
         </div>
         <button id="add-banner-btn" class="px-3 py-2 bg-teal-700 text-white font-semibold text-xs rounded-lg hover:bg-teal-800 transition">+ নতুন ব্যনার</button>
       </div>
@@ -561,6 +569,24 @@ async function renderBannersTab(container) {
         ` : `
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             ${sliderBanners.map(b => renderBannerItemHtml(b)).join('')}
+          </div>
+        `}
+      </div>
+
+      <!-- Mid-Page Banners Section -->
+      <div class="space-y-3 pt-2">
+        <h3 class="text-sm font-bold text-slate-700 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-indigo-600"></span>
+          মাঝের ব্যানারসমূহ (${midBanners.length})
+        </h3>
+        <p class="text-[11px] text-slate-500 -mt-2">হোমপেজে নির্দিষ্ট ক্যাটাগরি সেকশনের পরে এই ব্যানারগুলো প্রদর্শিত হবে।</p>
+        ${midBanners.length === 0 ? `
+          <div class="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl text-center text-xs">
+            কোনো মাঝের ব্যানার নেই। হোমপেজে সেকশনগুলোর মাঝে ব্যানার দেখাতে ব্যানার যোগ করুন।
+          </div>
+        ` : `
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            ${midBanners.map(b => renderBannerItemHtml(b)).join('')}
           </div>
         `}
       </div>
@@ -612,6 +638,13 @@ async function showBannerFormModal(banner = null) {
   try {
     const catSnap = await getDocs(collection(db, 'categories'));
     catSnap.forEach(d => categories.push({ id: d.id, ...d.data() }));
+    // Sort categories as they are sorted in database/view
+    categories.sort((a, b) => {
+      const orderA = typeof a.order === 'number' ? a.order : 9999;
+      const orderB = typeof b.order === 'number' ? b.order : 9999;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.name || '').localeCompare(b.name || '');
+    });
   } catch (err) {
     console.error('Error fetching categories for banner modal:', err);
   }
@@ -627,9 +660,21 @@ async function showBannerFormModal(banner = null) {
         <div>
           <label class="block font-semibold mb-1">ব্যনারের ধরন (Banner Type) *</label>
           <select id="b-type" required class="w-full p-2 border border-slate-300 rounded-lg bg-white">
-            <option value="slider" ${!banner || banner.type !== 'side' ? 'selected' : ''}>স্লাইডার ব্যানার (Hero Slider Banner)</option>
+            <option value="slider" ${!banner || (banner.type !== 'side' && banner.type !== 'mid') ? 'selected' : ''}>স্লাইডার ব্যানার (Hero Slider Banner)</option>
+            <option value="mid" ${banner?.type === 'mid' ? 'selected' : ''}>মাঝের ব্যানার (Mid-Page Banner)</option>
             <option value="side" ${banner?.type === 'side' ? 'selected' : ''}>সাইড ব্যানার (Static Side Banner)</option>
           </select>
+        </div>
+
+        <div id="mid-banner-position-container" class="hidden">
+          <label class="block font-semibold mb-1">প্রদর্শনের অবস্থান (Display Position) *</label>
+          <select id="b-position" class="w-full p-2 border border-slate-300 rounded-lg bg-white">
+            <option value="">কোনো ক্যাটাগরি সিলেক্ট করুন</option>
+            ${categories.map(c => `
+              <option value="${escapeHtml(c.name)}" ${banner?.displayAfterCategory === c.name ? 'selected' : ''}>${escapeHtml(c.name)} এর পরে</option>
+            `).join('')}
+          </select>
+          <p class="text-[10px] text-slate-400 mt-1">হোমপেজে কোন ক্যাটাগরি সেকশনের পরে এই ব্যানারটি বসবে তা নির্বাচন করুন।</p>
         </div>
 
         <div>
@@ -638,12 +683,12 @@ async function showBannerFormModal(banner = null) {
         </div>
 
         <div>
-          <label class="block font-semibold mb-1">শিরোনাম (Title)</label>
+          <label class="block font-semibold mb-1">শিরোনাম (Title) - ঐচ্ছিক</label>
           <input type="text" id="b-title" value="${escapeHtml(banner?.title || '')}" class="w-full p-2 border border-slate-300 rounded-lg" placeholder="যেমন: ঈদ স্পেশাল ডিসকাউন্ট!" />
         </div>
 
         <div>
-          <label class="block font-semibold mb-1">উপ-শিরোনাম / অফার বার্তা (Subtitle)</label>
+          <label class="block font-semibold mb-1">উপ-শিরোনাম / অফার বার্তা (Subtitle) - ঐচ্ছিক</label>
           <input type="text" id="b-subtitle" value="${escapeHtml(banner?.subtitle || '')}" class="w-full p-2 border border-slate-300 rounded-lg" placeholder="যেমন: সব প্রোডাক্টে ৩০% ছাড়..." />
         </div>
 
@@ -668,15 +713,33 @@ async function showBannerFormModal(banner = null) {
 
   document.body.appendChild(modal);
 
+  const typeSelect = modal.querySelector('#b-type');
+  const positionContainer = modal.querySelector('#mid-banner-position-container');
+  const positionSelect = modal.querySelector('#b-position');
+
+  const togglePositionField = () => {
+    if (typeSelect.value === 'mid') {
+      positionContainer.classList.remove('hidden');
+      positionSelect.setAttribute('required', 'required');
+    } else {
+      positionContainer.classList.add('hidden');
+      positionSelect.removeAttribute('required');
+    }
+  };
+
+  typeSelect.addEventListener('change', togglePositionField);
+  togglePositionField(); // Initialize visibility
+
   modal.querySelector('#close-banner-modal-btn').addEventListener('click', () => modal.remove());
 
   modal.querySelector('#banner-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const type = modal.querySelector('#b-type').value;
+    const type = typeSelect.value;
     const url = modal.querySelector('#b-url').value.trim();
     const title = modal.querySelector('#b-title').value.trim();
     const subtitle = modal.querySelector('#b-subtitle').value.trim();
     const linkedCategoryId = modal.querySelector('#b-category').value;
+    const displayAfterCategory = type === 'mid' ? positionSelect.value : '';
 
     if (!url) return;
 
@@ -686,6 +749,7 @@ async function showBannerFormModal(banner = null) {
       title: title,
       subtitle: subtitle,
       linkedCategoryId: linkedCategoryId || '',
+      displayAfterCategory: displayAfterCategory || '',
       updatedAt: new Date().toISOString()
     };
 
@@ -699,7 +763,7 @@ async function showBannerFormModal(banner = null) {
     }
 
     modal.remove();
-    renderAdminTab('banners');
+    renderBannersTab(container);
   });
 }
 
