@@ -853,6 +853,99 @@ async function renderCategoryProductGrids(catFilter = 'সব') {
   attachProductCardEvents();
 }
 
+// Helper to enable mouse-drag and touch-drag on carousel containers
+function snapToNearestCard(container) {
+  const currentScrollLeft = container.scrollLeft;
+  const card = container.querySelector('.product-card');
+  if (!card) return;
+
+  const style = window.getComputedStyle(container);
+  const gap = parseFloat(style.columnGap || style.gap) || 12;
+  const cardWidth = card.getBoundingClientRect().width;
+  const stepWidth = cardWidth + gap;
+
+  const nearestIndex = Math.round(currentScrollLeft / stepWidth);
+  container.scrollTo({ left: nearestIndex * stepWidth, behavior: 'smooth' });
+}
+
+function enableCarouselDrag(container) {
+  let isDown = false;
+  let startX;
+  let scrollLeft;
+  let hasDragged = false;
+
+  // Mouse Events
+  container.addEventListener('mousedown', (e) => {
+    isDown = true;
+    container._isDown = true;
+    container.classList.add('dragging');
+    startX = e.pageX - container.offsetLeft;
+    scrollLeft = container.scrollLeft;
+    hasDragged = false;
+  });
+
+  container.addEventListener('mouseleave', () => {
+    if (!isDown) return;
+    isDown = false;
+    container._isDown = false;
+    container.classList.remove('dragging');
+    snapToNearestCard(container);
+  });
+
+  container.addEventListener('mouseup', (e) => {
+    if (!isDown) return;
+    isDown = false;
+    container._isDown = false;
+    container.classList.remove('dragging');
+    snapToNearestCard(container);
+    
+    if (hasDragged) {
+      const preventClick = (clickEvent) => {
+        clickEvent.stopImmediatePropagation();
+        clickEvent.preventDefault();
+      };
+      container.addEventListener('click', preventClick, true);
+      setTimeout(() => {
+        container.removeEventListener('click', preventClick, true);
+      }, 50);
+    }
+  });
+
+  container.addEventListener('mousemove', (e) => {
+    if (!isDown) return;
+    e.preventDefault();
+    const x = e.pageX - container.offsetLeft;
+    const walk = (x - startX) * 1.5; // Drag speed multiplier
+    if (Math.abs(walk) > 5) {
+      hasDragged = true;
+    }
+    container.scrollLeft = scrollLeft - walk;
+  });
+
+  // Touch Events for mobile swipe/drag
+  container.addEventListener('touchstart', (e) => {
+    container._isDown = true;
+    container.classList.add('dragging');
+    const touch = e.touches[0];
+    startX = touch.pageX - container.offsetLeft;
+    scrollLeft = container.scrollLeft;
+  }, { passive: true });
+
+  container.addEventListener('touchend', () => {
+    container._isDown = false;
+    container.classList.remove('dragging');
+    snapToNearestCard(container);
+  }, { passive: true });
+
+  container.addEventListener('touchmove', (e) => {
+    if (!container._isDown) return;
+    const touch = e.touches[0];
+    const x = touch.pageX - container.offsetLeft;
+    const walk = (x - startX) * 1.2;
+    container.scrollLeft = scrollLeft - walk;
+  }, { passive: true });
+}
+
 // Setup horizontal carousel dots navigation
 function setupCarouselDots(catName, container, dotsContainer, totalProducts) {
   if (!dotsContainer) return;
@@ -905,30 +998,51 @@ function setupCarouselDots(catName, container, dotsContainer, totalProducts) {
   container.addEventListener('scroll', handleScroll);
   container._carouselScrollHandler = handleScroll;
 
+  // Enable drag and swipe features
+  enableCarouselDrag(container);
+
   // Clear existing interval on this container if any
   if (container._carouselIntervalId) {
     clearInterval(container._carouselIntervalId);
   }
 
-  // Auto-scroll loop every 4 seconds (4000ms)
+  // Auto-scroll loop every 3 seconds (3000ms) - advances by exactly ONE product at a time
   const intervalId = setInterval(() => {
     // Self-destruct if the carousel has been detached or removed from DOM
     if (!document.body.contains(container)) {
       clearInterval(intervalId);
       return;
     }
-    const currentScrollLeft = container.scrollLeft;
-    const width = container.clientWidth || 1;
-    const activeIndex = Math.min(
-      totalPages - 1,
-      Math.max(0, Math.round(currentScrollLeft / width))
-    );
-    let nextIndex = activeIndex + 1;
-    if (nextIndex >= totalPages) {
-      nextIndex = 0;
+
+    // Skip auto-scroll while the user is actively dragging or holding down the carousel
+    if (container._isDown) {
+      return;
     }
-    container.scrollTo({ left: nextIndex * width, behavior: 'smooth' });
-  }, 4000);
+
+    const maxScrollLeft = container.scrollWidth - container.clientWidth;
+    if (maxScrollLeft <= 5) {
+      return; // Not scrollable enough
+    }
+
+    const currentScrollLeft = container.scrollLeft;
+    const card = container.querySelector('.product-card');
+    if (!card) return;
+
+    const style = window.getComputedStyle(container);
+    const gap = parseFloat(style.columnGap || style.gap) || 12;
+    const cardWidth = card.getBoundingClientRect().width;
+    const stepWidth = cardWidth + gap;
+
+    if (currentScrollLeft >= maxScrollLeft - 5) {
+      // Loop back to the beginning smoothly
+      container.scrollTo({ left: 0, behavior: 'smooth' });
+    } else {
+      // Advance by exactly one product card width
+      const currentIndex = Math.round(currentScrollLeft / stepWidth);
+      const nextIndex = currentIndex + 1;
+      container.scrollTo({ left: nextIndex * stepWidth, behavior: 'smooth' });
+    }
+  }, 3000);
 
   container._carouselIntervalId = intervalId;
   activeCarouselIntervals.push(intervalId);

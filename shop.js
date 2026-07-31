@@ -205,6 +205,14 @@ export function createProductCardHTML(p) {
 let cachedBanners = null;
 let cachedCategories = null;
 
+export function clearCachedCategories() {
+  cachedCategories = null;
+}
+
+export function clearCachedBanners() {
+  cachedBanners = null;
+}
+
 // Fetch Banners for Hero Slider
 export async function fetchBanners() {
   if (cachedBanners) return cachedBanners;
@@ -224,10 +232,23 @@ export async function fetchBanners() {
 export async function fetchCategories() {
   if (cachedCategories) return cachedCategories;
   try {
-    const q = query(collection(db, 'categories'), orderBy('name', 'asc'));
-    const snap = await getDocs(q);
+    const snap = await getDocs(collection(db, 'categories'));
     cachedCategories = [];
-    snap.forEach(d => cachedCategories.push({ id: d.id, ...d.data() }));
+    snap.forEach(d => {
+      const data = d.data();
+      cachedCategories.push({
+        id: d.id,
+        order: typeof data.order === 'number' ? data.order : 9999,
+        ...data
+      });
+    });
+    // Sort by order ascending, then by name alphabetically
+    cachedCategories.sort((a, b) => {
+      if (a.order !== b.order) {
+        return a.order - b.order;
+      }
+      return (a.name || '').localeCompare(b.name || '');
+    });
     return cachedCategories;
   } catch (err) {
     console.error('Error fetching categories:', err);

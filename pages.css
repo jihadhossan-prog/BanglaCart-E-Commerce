@@ -243,6 +243,17 @@ html.dark .load-more-btn {
   padding-bottom: 8px; /* spacing at bottom */
 }
 
+.product-grid.carousel-active.dragging {
+  scroll-snap-type: none !important;
+  scroll-behavior: auto !important;
+  cursor: grabbing !important;
+}
+
+.product-grid.carousel-active.dragging .product-card {
+  user-select: none !important;
+  pointer-events: none !important;
+}
+
 .product-grid.carousel-active::-webkit-scrollbar {
   display: none !important; /* hide scrollbar in Chrome/Safari */
 }

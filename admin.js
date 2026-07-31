@@ -404,28 +404,86 @@ async function renderCategoriesTab(container) {
   const categories = [];
   snap.forEach(d => categories.push({ id: d.id, ...d.data() }));
 
+  // Sort by order ascending, then name
+  categories.sort((a, b) => {
+    const orderA = typeof a.order === 'number' ? a.order : 9999;
+    const orderB = typeof b.order === 'number' ? b.order : 9999;
+    if (orderA !== orderB) return orderA - orderB;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+
   container.innerHTML = `
     <div class="space-y-4">
-      <div class="flex items-center justify-between">
-        <h2 class="text-xl font-bold text-slate-800">ক্যাটাগরি ম্যানেজমেন্ট (${categories.length})</h2>
-        <button id="add-cat-btn" class="px-3 py-2 bg-teal-700 text-white font-semibold text-xs rounded-lg">+ নতুন ক্যাটাগরি</button>
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h2 class="text-xl font-bold text-slate-800">ক্যাটাগরি ম্যানেজমেন্ট (${categories.length})</h2>
+          <p class="text-xs text-slate-500 mt-0.5">হোমপেজে ক্যাটাগরিগুলো সাজাতে ড্র্যাগ-অ্যান্ড-ড্রপ (Drag & Drop) করুন</p>
+        </div>
+        <button id="add-cat-btn" class="px-3 py-2 bg-teal-700 text-white font-semibold text-xs rounded-lg hover:bg-teal-800 transition">+ নতুন ক্যাটাগরি</button>
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+      <div id="draggable-categories-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
         ${categories.map(c => `
-          <div class="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between">
-            <span class="font-bold text-slate-800 text-sm">${escapeHtml(c.name)}</span>
-            <button class="del-cat-btn px-2 py-1 bg-red-50 text-red-600 rounded text-xs" data-id="${c.id}">মুছুন</button>
+          <div class="bg-white p-3 rounded-xl border border-slate-200 flex items-center justify-between hover:shadow-xs transition" data-id="${c.id}">
+            <div class="flex items-center gap-2">
+              <span class="text-slate-400 drag-handle cursor-grab active:cursor-grabbing p-1 hover:text-slate-600 transition">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/>
+                </svg>
+              </span>
+              <span class="font-bold text-slate-800 text-sm">${escapeHtml(c.name)}</span>
+            </div>
+            <button class="del-cat-btn px-2 py-1 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100 transition" data-id="${c.id}">মুছুন</button>
           </div>
         `).join('')}
       </div>
     </div>
   `;
 
+  // Initialize SortableJS
+  const listEl = container.querySelector('#draggable-categories-list');
+  if (listEl && typeof Sortable !== 'undefined') {
+    new Sortable(listEl, {
+      handle: '.drag-handle',
+      animation: 150,
+      ghostClass: 'bg-teal-50',
+      onEnd: async function () {
+        const items = Array.from(listEl.children);
+        showToast('নতুন অবস্থান সংরক্ষণ করা হচ্ছে...', 'info');
+        
+        try {
+          const promises = items.map((item, index) => {
+            const catId = item.dataset.id;
+            return updateDoc(doc(db, 'categories', catId), {
+              order: index + 1
+            });
+          });
+          await Promise.all(promises);
+          showToast('ক্যাটাগরি রি-অর্ডার সফল হয়েছে!', 'success');
+        } catch (err) {
+          console.error('Error saving category order:', err);
+          showToast('নতুন অবস্থান সংরক্ষণ করতে ব্যর্থ হয়েছে', 'error');
+        }
+      }
+    });
+  }
+
   container.querySelector('#add-cat-btn')?.addEventListener('click', async () => {
     const name = prompt('নতুন ক্যাটাগরির নাম লিখুন:');
-    if (name) {
-      await addDoc(collection(db, 'categories'), { name: name.trim() });
+    if (name && name.trim()) {
+      // Find max order to place new category at the end
+      let maxOrder = 0;
+      categories.forEach(c => {
+        if (typeof c.order === 'number' && c.order > maxOrder) {
+          maxOrder = c.order;
+        }
+      });
+      const newOrder = maxOrder + 1;
+
+      await addDoc(collection(db, 'categories'), { 
+        name: name.trim(),
+        order: newOrder
+      });
       showToast('ক্যাটাগরি যোগ করা হয়েছে', 'success');
       renderAdminTab('categories');
     }
