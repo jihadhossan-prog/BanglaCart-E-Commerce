@@ -19,7 +19,7 @@ import {
   getCountFromServer
 } from './firebase-config.js';
 import { formatPrice, showToast, escapeHtml, getValidImageUrl } from './core.js';
-import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
+import * as XLSX from 'xlsx';
 
 let currentAdminUser = null;
 let activeAdminTab = 'dashboard';
@@ -225,7 +225,7 @@ async function renderProductsTab(container) {
           <tbody>
             ${products.map(p => `
               <tr>
-                <td><img src="${p.image || (p.images ? p.images[0] : '')}" class="w-10 h-10 object-cover rounded-lg bg-slate-100" /></td>
+                <td><img src="${getValidImageUrl(p.image || (p.images ? p.images[0] : ''))}" class="w-10 h-10 object-cover rounded-lg bg-slate-100" /></td>
                 <td class="font-semibold">${escapeHtml(p.name)}</td>
                 <td><span class="px-2 py-0.5 bg-slate-100 rounded text-xs">${escapeHtml(p.category || 'সাধারণ')}</span></td>
                 <td><span class="font-bold text-teal-700">${formatPrice(p.price)}</span> ${p.discountPrice ? `<span class="text-xs text-slate-400 line-through">${formatPrice(p.discountPrice)}</span>` : ''}</td>
@@ -766,10 +766,6 @@ async function showOrderDetailsModal(orderId, order) {
           <p class="text-xs text-slate-500">তারিখ: ${new Date(order.createdAt).toLocaleString('bn-BD')}</p>
         </div>
         <div class="flex items-center gap-2">
-          <button id="download-order-img-btn" class="px-3 py-1.5 bg-teal-700 text-white font-semibold text-xs rounded-lg hover:bg-teal-800 transition flex items-center gap-1 cursor-pointer">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-            <span>ছবি হিসেবে ডাউনলোড করুন</span>
-          </button>
           <button id="close-order-modal-btn" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition cursor-pointer">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
@@ -811,7 +807,7 @@ async function showOrderDetailsModal(orderId, order) {
             ${items.map(item => `
               <div class="p-3 flex items-center justify-between text-xs">
                 <div class="flex items-center gap-2">
-                  <img src="${getValidImageUrl(item.image)}" class="w-10 h-10 object-cover rounded-lg border border-slate-100" crossorigin="anonymous" />
+                  <img src="${getValidImageUrl(item.image)}" class="w-10 h-10 object-cover rounded-lg border border-slate-100" />
                   <div>
                     <h4 class="font-semibold text-slate-800">${escapeHtml(item.name)}</h4>
                     <p class="text-slate-500 text-[10px]">মূল্য: ${formatPrice(item.price)} x ${item.qty}</p>
@@ -852,27 +848,6 @@ async function showOrderDetailsModal(orderId, order) {
 
   modal.querySelector('#close-order-modal-btn').addEventListener('click', () => {
     modal.remove();
-  });
-
-  modal.querySelector('#download-order-img-btn').addEventListener('click', async () => {
-    const printableArea = modal.querySelector('#order-printable-area');
-    if (!window.html2canvas) {
-      showToast('html2canvas লোড হয়নি', 'error');
-      return;
-    }
-    try {
-      showToast('ছবি তৈরি হচ্ছে...', 'info');
-      const canvas = await window.html2canvas(printableArea, { scale: 2, useCORS: true });
-      const image = canvas.toDataURL('image/png');
-      const a = document.createElement('a');
-      a.href = image;
-      a.download = `order-${order.orderNumber || orderId}.png`;
-      a.click();
-      showToast('ছবি সফলভাবে ডাউনলোড হয়েছে', 'success');
-    } catch (err) {
-      console.error('Error generating order image:', err);
-      showToast('ছবি তৈরি করতে সমস্যা হয়েছে', 'error');
-    }
   });
 }
 
@@ -928,7 +903,7 @@ async function renderCustomersTab(container) {
         });
         const resData = await res.json();
         if (!res.ok) {
-          throw new Error(resData.error || 'Failed to delete auth user');
+          console.warn('Auth user deletion warning:', resData.error);
         }
 
         await deleteDoc(doc(db, 'users', userId));
@@ -1422,4 +1397,3 @@ async function renderContentTab(container) {
     container.innerHTML = `<p class="text-xs text-red-500">কন্টেন্ট লোড করতে সমস্যা হয়েছে।</p>`;
   }
 }
-

@@ -271,7 +271,9 @@ export async function updateUserAddress(addressData) {
     await updateDoc(userRef, {
       defaultAddress: addressData
     });
-    userProfile.defaultAddress = addressData;
+    if (userProfile) {
+      userProfile.defaultAddress = addressData;
+    }
     showToast('ঠিকানা হালনাগাদ করা হয়েছে', 'success');
   } catch (error) {
     showToast('ঠিকানা আপডেট করা যায়নি', 'error');

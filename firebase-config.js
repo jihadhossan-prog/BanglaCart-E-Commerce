@@ -1,6 +1,6 @@
 // Firebase Configuration and Initialization
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-analytics.js";
+import { initializeApp } from "firebase/app";
+import { getAnalytics, isSupported } from "firebase/analytics";
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
@@ -11,7 +11,7 @@ import {
   updateProfile,
   GoogleAuthProvider,
   signInWithPopup
-} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+} from "firebase/auth";
 import { 
   getFirestore, 
   collection, 
@@ -33,7 +33,7 @@ import {
   arrayUnion,
   arrayRemove,
   getCountFromServer
-} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+} from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDPT3fRRT8m_zHlpEfo3wuuWe2NRsHHUqs",
@@ -52,18 +52,17 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 let analytics = null;
-isSupported()
-  .then((supported) => {
-    if (supported) {
-      analytics = getAnalytics(app);
-      console.log("Firebase Analytics initialized successfully.");
-    } else {
-      console.log("Firebase Analytics is not supported in this environment.");
-    }
-  })
-  .catch((err) => {
-    console.warn("Firebase Analytics support check failed:", err);
-  });
+if (typeof window !== 'undefined') {
+  isSupported()
+    .then((supported) => {
+      if (supported) {
+        analytics = getAnalytics(app);
+      }
+    })
+    .catch((err) => {
+      console.warn("Firebase Analytics support check failed:", err);
+    });
+}
 
 export { 
   app, 

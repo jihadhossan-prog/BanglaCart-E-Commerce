@@ -214,6 +214,29 @@ function setupGlobalEventListeners() {
     loginForm.classList.add('hidden');
   });
 
+  // Password Show/Hide Toggle
+  const setupPasswordToggle = (btnId, inputId, eyeId, eyeOffId) => {
+    document.getElementById(btnId)?.addEventListener('click', () => {
+      const input = document.getElementById(inputId);
+      const eye = document.getElementById(eyeId);
+      const eyeOff = document.getElementById(eyeOffId);
+      if (input) {
+        if (input.type === 'password') {
+          input.type = 'text';
+          eye?.classList.add('hidden');
+          eyeOff?.classList.remove('hidden');
+        } else {
+          input.type = 'password';
+          eye?.classList.remove('hidden');
+          eyeOff?.classList.add('hidden');
+        }
+      }
+    });
+  };
+
+  setupPasswordToggle('toggle-login-password', 'login-password', 'eye-login', 'eye-off-login');
+  setupPasswordToggle('toggle-reg-password', 'reg-password', 'eye-reg', 'eye-off-reg');
+
   loginForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const identifier = document.getElementById('login-email').value;
@@ -1665,4 +1688,3 @@ export function renderSettingsView(container) {
     renderView('home');
   });
 }
-

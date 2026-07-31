@@ -7,7 +7,6 @@ import {
   onSnapshot, 
   query, 
   orderBy, 
-  serverTimestamp,
   updateDoc,
   deleteDoc
 } from './firebase-config.js';

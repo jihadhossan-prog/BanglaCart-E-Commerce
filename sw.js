@@ -9,8 +9,7 @@ const ASSETS_TO_CACHE = [
   '/shop.js',
   '/cart-checkout.js',
   '/chat.js',
-  '/app.js',
-  '/icons.svg'
+  '/app.js'
 ];
 
 self.addEventListener('install', (event) => {
