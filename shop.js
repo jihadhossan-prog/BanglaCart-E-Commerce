@@ -235,8 +235,20 @@ export async function fetchCategories() {
   }
 }
 
-// Fetch Initial 4 products (2 rows x 2 cols on mobile) for a category
-export async function fetchCategoryProducts(categoryName, limitCount = 4) {
+// Get current grid column count based on screen width
+export function getCurrentGridColumns() {
+  const width = window.innerWidth;
+  if (width >= 1280) return 5;
+  if (width >= 1024) return 4;
+  if (width >= 640) return 3;
+  return 2;
+}
+
+// Fetch Initial products (2 rows x column count) for a category
+export async function fetchCategoryProducts(categoryName, limitCount) {
+  if (limitCount === undefined) {
+    limitCount = getCurrentGridColumns() * 2;
+  }
   try {
     const colRef = collection(db, 'products');
     let q;
@@ -278,12 +290,15 @@ export async function loadMoreCategoryProducts(categoryName, gridContainer, load
     loadMoreBtn.classList.add('opacity-50', 'pointer-events-none');
     loadMoreBtn.textContent = 'লোড হচ্ছে...';
 
+    const cols = getCurrentGridColumns();
+    const limitCount = cols * 2;
+
     const colRef = collection(db, 'products');
     let q;
     if (categoryName && categoryName !== 'সব') {
-      q = query(colRef, where('category', '==', categoryName), startAfter(cursorInfo.lastDoc), limit(4));
+      q = query(colRef, where('category', '==', categoryName), startAfter(cursorInfo.lastDoc), limit(limitCount));
     } else {
-      q = query(colRef, startAfter(cursorInfo.lastDoc), limit(4));
+      q = query(colRef, startAfter(cursorInfo.lastDoc), limit(limitCount));
     }
 
     const snap = await getDocs(q);
@@ -295,7 +310,7 @@ export async function loadMoreCategoryProducts(categoryName, gridContainer, load
       newLastDoc = d;
     });
 
-    const hasMore = newProducts.length === 4;
+    const hasMore = newProducts.length === limitCount;
     categoryCursors[categoryName] = { lastDoc: newLastDoc, hasMore };
 
     // Append new products to grid

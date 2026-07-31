@@ -20,7 +20,8 @@ import {
   addProductReview, 
   createProductCardHTML, 
   toggleWishlist, 
-  loadUserWishlist 
+  loadUserWishlist,
+  getCurrentGridColumns
 } from './shop.js';
 import { 
   initCart, 
@@ -50,8 +51,12 @@ let selectedCategory = 'সব';
 let categoriesList = [];
 let notificationUnsubscribe = null;
 let userNotifications = [];
+let lastColumns = 2; // Will be initialized on load
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Initialize lastColumns with the current grid column count
+  lastColumns = getCurrentGridColumns();
+
   // Load saved theme from localStorage instantly
   const savedTheme = localStorage.getItem('theme');
   if (savedTheme) {
@@ -92,6 +97,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Load initial view
   renderView('home');
+
+  // Handle window resize past column count breakpoints
+  window.addEventListener('resize', () => {
+    if (activeTab === 'home') {
+      const currentCols = getCurrentGridColumns();
+      if (currentCols !== lastColumns) {
+        lastColumns = currentCols;
+        renderCategoryProductGrids(selectedCategory);
+      }
+    }
+  });
 });
 
 // Real-time Notifications Listener
@@ -732,8 +748,9 @@ async function renderCategoryProductGrids(catFilter = 'সব') {
 
     const gridContainer = section.querySelector(`#grid-${cat.name}`);
 
-    // Fetch initial 4 products
-    const { products, hasMore } = await fetchCategoryProducts(cat.name, 4);
+    // Fetch initial products (2 rows x column count)
+    const initialLimit = getCurrentGridColumns() * 2;
+    const { products, hasMore } = await fetchCategoryProducts(cat.name, initialLimit);
 
     if (products.length === 0) {
       gridContainer.innerHTML = `<div class="col-span-2 sm:col-span-3 text-center py-6 text-xs text-slate-400">এই ক্যাটাগরিতে কোনো প্রোডাক্ট পাওয়া যায়নি</div>`;
@@ -744,7 +761,7 @@ async function renderCategoryProductGrids(catFilter = 'সব') {
       gridContainer.insertAdjacentHTML('beforeend', createProductCardHTML(p));
     });
 
-    // Mandatory "আরও" (Load More) link at bottom right of grid section if more than 4 items exist
+    // Mandatory "আরও" (Load More) link at bottom right of grid section if more items exist
     if (hasMore) {
       const footerContainer = document.createElement('div');
       footerContainer.className = 'flex justify-end mt-3 pt-2 border-t border-slate-100';

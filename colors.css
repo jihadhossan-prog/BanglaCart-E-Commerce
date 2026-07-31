@@ -53,4 +53,78 @@
   --status-warning-text: #92400e; /* amber-800 */
   --status-info-bg: #e0f2fe;      /* sky-100 */
   --status-info-text: #0369a1;    /* sky-800 */
+
+  /* ===== Admin Panel Colors ===== */
+  /* Sidebar */
+  --admin-sidebar-bg: var(--bg-card);           /* white */
+  --admin-sidebar-text: var(--text-secondary);   /* #334155 */
+  --admin-sidebar-hover-bg: var(--bg-surface);  /* #f1f5f9 */
+  --admin-sidebar-hover-text: var(--text-primary); /* #0f172a */
+  --admin-sidebar-active-bg: #f0fdfa;            /* teal-50 */
+  --admin-sidebar-active-text: var(--brand-primary); /* teal-700 */
+  --admin-sidebar-active-border: #ccfbf1;        /* teal-100 */
+
+  /* Body & Layout */
+  --admin-body-bg: var(--bg-page);               /* #f8fafc */
+  --admin-body-text: #1e293b;                    /* slate-800 */
+
+  /* Cards */
+  --admin-card-bg: var(--bg-card);               /* white */
+  --admin-card-border: var(--border-default);     /* #e2e8f0 */
+
+  /* Tables */
+  --admin-table-header-bg: var(--bg-page);       /* #f8fafc */
+  --admin-table-header-text: #475569;            /* slate-600 */
+  --admin-table-border: var(--border-default);     /* #e2e8f0 */
+  --admin-table-row-border: var(--border-light); /* #f1f5f9 */
+  --admin-table-row-text: var(--text-secondary);   /* #334155 */
+
+  /* Chat Grid */
+  --admin-chat-grid-bg: var(--bg-card);           /* white */
+  --admin-chat-grid-border: var(--border-default); /* #e2e8f0 */
+
+  /* Status Colors */
+  --admin-status-paid: var(--status-success-text);       /* emerald-800 */
+  --admin-status-paid-bg: var(--status-success-bg);     /* emerald-100 */
+  --admin-status-unpaid: var(--status-error-text);       /* rose-800 */
+  --admin-status-unpaid-bg: var(--status-error-bg);     /* rose-100 */
+  --admin-status-pending: var(--status-warning-text);    /* amber-800 */
+  --admin-status-pending-bg: var(--status-warning-bg);  /* amber-100 */
+
+  --admin-status-processing: var(--status-info-text);    /* sky-800 */
+  --admin-status-processing-bg: var(--status-info-bg);  /* sky-100 */
+  --admin-status-shipped: #2563eb;                       /* blue-600 */
+  --admin-status-shipped-bg: #eff6ff;                   /* blue-50 */
+  --admin-status-out-for-delivery: #7c3aed;              /* purple-600 */
+  --admin-status-out-for-delivery-bg: #f5f3ff;          /* purple-50 */
+  --admin-status-delivered: var(--status-success-text);  /* emerald-800 */
+  --admin-status-delivered-bg: var(--status-success-bg);/* emerald-100 */
+  --admin-status-cancelled: var(--status-error-text);    /* rose-800 */
+  --admin-status-cancelled-bg: var(--status-error-bg);  /* rose-100 */
+
+  /* General Palette Mapping for Admin Customizations */
+  --admin-slate-800: #1e293b;
+  --admin-slate-600: #475569;
+  --admin-slate-500: var(--text-muted);                  /* #64748b */
+  --admin-slate-400: var(--text-light);                  /* #94a3b8 */
+  --admin-slate-300: #cbd5e1;
+  --admin-slate-200: var(--border-default);              /* #e2e8f0 */
+  --admin-slate-100: var(--bg-surface);                  /* #f1f5f9 */
+  --admin-slate-50: var(--bg-page);                      /* #f8fafc */
+
+  --admin-teal-700: var(--brand-primary);                /* #0f766e */
+  --admin-teal-600: var(--brand-primary-hover);          /* #0d9488 */
+  --admin-teal-50: #f0fdfa;
+
+  --admin-blue-600: #2563eb;
+  --admin-blue-50: #eff6ff;
+
+  --admin-purple-600: #7c3aed;
+  --admin-purple-50: #f5f3ff;
+
+  --admin-amber-600: var(--brand-accent);                /* #d97706 */
+  --admin-amber-50: #fffbeb;
+
+  --admin-red-600: #dc2626;
+  --admin-red-50: #fef2f2;
 }

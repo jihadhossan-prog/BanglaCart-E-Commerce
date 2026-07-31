@@ -5,6 +5,48 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>বাংলামার্ট এডমিন প্যানেল | Admin Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            teal: {
+              50: 'var(--admin-teal-50)',
+              600: 'var(--admin-teal-600)',
+              700: 'var(--admin-teal-700)',
+            },
+            slate: {
+              50: 'var(--admin-slate-50)',
+              100: 'var(--admin-slate-100)',
+              200: 'var(--admin-slate-200)',
+              300: 'var(--admin-slate-300)',
+              400: 'var(--admin-slate-400)',
+              500: 'var(--admin-slate-500)',
+              600: 'var(--admin-slate-600)',
+              800: 'var(--admin-slate-800)',
+              900: 'var(--admin-slate-900)',
+            },
+            blue: {
+              50: 'var(--admin-blue-50)',
+              600: 'var(--admin-blue-600)',
+            },
+            purple: {
+              50: 'var(--admin-purple-50)',
+              600: 'var(--admin-purple-600)',
+            },
+            amber: {
+              50: 'var(--admin-amber-50)',
+              600: 'var(--admin-amber-600)',
+            },
+            red: {
+              50: 'var(--admin-red-50)',
+              600: 'var(--admin-red-600)',
+            }
+          }
+        }
+      }
+    };
+  </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <link rel="stylesheet" href="./colors.css" />
   <link rel="stylesheet" href="./style.css" />

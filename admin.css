@@ -3,15 +3,15 @@
 /* Tailwind CDN is loaded via script tag in HTML */
 
 :root {
-  --admin-primary: #0f766e;
-  --admin-dark: #0f172a;
-  --admin-bg: #f8fafc;
+  --admin-primary: var(--admin-teal-700);
+  --admin-dark: var(--admin-sidebar-hover-text);
+  --admin-bg: var(--admin-body-bg);
 }
 
 body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background-color: var(--admin-bg);
-  color: #1e293b;
+  color: var(--admin-body-text);
   min-height: 100vh;
   min-height: 100dvh;
   margin: 0;
@@ -28,7 +28,7 @@ body {
   width: 100%;
   padding: 10px 14px;
   border-radius: 10px;
-  color: #334155;
+  color: var(--admin-sidebar-text);
   font-size: 13px;
   font-weight: 600;
   transition: all 0.2s ease;
@@ -38,15 +38,15 @@ body {
 }
 
 .admin-sidebar-item:hover {
-  background-color: #f1f5f9;
-  color: #0f172a;
+  background-color: var(--admin-sidebar-hover-bg);
+  color: var(--admin-sidebar-hover-text);
 }
 
 .admin-sidebar-item.active {
-  background-color: #f0fdfa;
-  color: #0f766e;
+  background-color: var(--admin-sidebar-active-bg);
+  color: var(--admin-sidebar-active-text);
   font-weight: 700;
-  border-color: #ccfbf1;
+  border-color: var(--admin-sidebar-active-border);
 }
 
 .admin-sidebar-item svg {
@@ -57,8 +57,8 @@ body {
 
 /* Stat Cards */
 .stat-card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--admin-card-bg);
+  border: 1px solid var(--admin-card-border);
   border-radius: 16px;
   padding: 18px;
   display: flex;
@@ -81,8 +81,8 @@ body {
   width: 100%;
   overflow-x: auto;
   border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  background: white;
+  border: 1px solid var(--admin-table-border);
+  background: var(--admin-card-bg);
 }
 
 table.admin-table {
@@ -93,17 +93,17 @@ table.admin-table {
 }
 
 table.admin-table th {
-  background: #f8fafc;
-  color: #475569;
+  background: var(--admin-table-header-bg);
+  color: var(--admin-table-header-text);
   font-weight: 600;
   padding: 12px 16px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--admin-table-border);
 }
 
 table.admin-table td {
   padding: 12px 16px;
-  border-bottom: 1px solid #f1f5f9;
-  color: #334155;
+  border-bottom: 1px solid var(--admin-table-row-border);
+  color: var(--admin-table-row-text);
   vertical-align: middle;
 }
 
@@ -114,9 +114,9 @@ table.admin-table td {
   height: calc(100vh - 120px);
   height: calc(100dvh - 120px);
   min-height: 500px;
-  background: white;
+  background: var(--admin-chat-grid-bg);
   border-radius: 16px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--admin-chat-grid-border);
   overflow: hidden;
 }
 
@@ -127,6 +127,6 @@ table.admin-table td {
   }
   #admin-chat-user-list {
     border-right: none !important;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid var(--admin-chat-grid-border);
   }
 }
