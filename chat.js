@@ -15,6 +15,13 @@ import { getCurrentUser, getUserProfile } from './auth.js';
 
 let messageUnsubscribe = null;
 
+export function cleanupLiveChat() {
+  if (messageUnsubscribe) {
+    messageUnsubscribe();
+    messageUnsubscribe = null;
+  }
+}
+
 export function initLiveChat(chatContainer, statusBadge) {
   const user = getCurrentUser();
   const profile = getUserProfile();

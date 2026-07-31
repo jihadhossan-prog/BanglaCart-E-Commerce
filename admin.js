@@ -23,6 +23,27 @@ import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm';
 
 let currentAdminUser = null;
 let activeAdminTab = 'dashboard';
+let adminSnapshotUnsubscribers = [];
+let activeThreadUnsubscribe = null;
+
+function cleanupAdminSnapshotListeners() {
+  if (activeThreadUnsubscribe) {
+    try {
+      activeThreadUnsubscribe();
+    } catch (e) {}
+    activeThreadUnsubscribe = null;
+  }
+  adminSnapshotUnsubscribers.forEach(unsub => {
+    if (typeof unsub === 'function') {
+      try {
+        unsub();
+      } catch (e) {
+        console.error('Error cleaning up admin snapshot listener:', e);
+      }
+    }
+  });
+  adminSnapshotUnsubscribers = [];
+}
 
 // Role-Based Access Control Verification
 onAuthStateChanged(auth, async (user) => {
@@ -69,6 +90,7 @@ function setupAdminNav() {
 
 // Router for Admin Tabs
 async function renderAdminTab(tab) {
+  cleanupAdminSnapshotListeners();
   activeAdminTab = tab;
   const main = document.getElementById('admin-main-content');
   if (!main) return;
@@ -1393,7 +1415,7 @@ function renderAdminChatTab(container) {
   `;
 
   // Listen to all active chats
-  onSnapshot(collection(db, 'chats'), (snapshot) => {
+  const unsubChats = onSnapshot(collection(db, 'chats'), (snapshot) => {
     const listContainer = container.querySelector('#admin-chat-user-list');
     if (!listContainer) return;
 
@@ -1461,9 +1483,17 @@ function renderAdminChatTab(container) {
       listContainer.appendChild(item);
     });
   });
+  adminSnapshotUnsubscribers.push(unsubChats);
 }
 
 function openAdminChatThread(chatId, chatMeta, threadBox) {
+  if (activeThreadUnsubscribe) {
+    try {
+      activeThreadUnsubscribe();
+    } catch (e) {}
+    activeThreadUnsubscribe = null;
+  }
+
   threadBox.dataset.activeChatId = chatId;
   threadBox.innerHTML = `
     <div class="p-3 border-b border-slate-200 bg-white font-bold text-xs text-slate-800">
@@ -1483,7 +1513,7 @@ function openAdminChatThread(chatId, chatMeta, threadBox) {
   const messagesRef = collection(db, 'chats', chatId, 'messages');
   const q = query(messagesRef, orderBy('timestamp', 'asc'));
 
-  onSnapshot(q, (snapshot) => {
+  activeThreadUnsubscribe = onSnapshot(q, (snapshot) => {
     msgBox.innerHTML = '';
     snapshot.forEach(docSnap => {
       const msg = docSnap.data();
@@ -1645,7 +1675,7 @@ async function renderNotificationsTab(container) {
   const notifsListContainer = container.querySelector('#admin-sent-notifs-list');
   const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
 
-  onSnapshot(q, (snapshot) => {
+  const unsubNotifs = onSnapshot(q, (snapshot) => {
     if (!notifsListContainer) return;
     const notifs = [];
     snapshot.forEach(docSnap => {
@@ -1720,6 +1750,7 @@ async function renderNotificationsTab(container) {
       });
     });
   });
+  adminSnapshotUnsubscribers.push(unsubNotifs);
 }
 
 // 11. Page Content Management Module

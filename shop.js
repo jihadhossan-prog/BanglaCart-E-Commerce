@@ -204,56 +204,106 @@ export function createProductCardHTML(p) {
 // Session caches for static/rarely changing data
 let cachedBanners = null;
 let cachedCategories = null;
+const cachedProductsByCategory = {};
+const cachedProductsMap = {};
 
 export function clearCachedCategories() {
   cachedCategories = null;
+  try {
+    localStorage.removeItem('cache_categories');
+  } catch (e) {}
 }
 
 export function clearCachedBanners() {
   cachedBanners = null;
+  try {
+    localStorage.removeItem('cache_banners');
+  } catch (e) {}
 }
 
 // Fetch Banners for Hero Slider
 export async function fetchBanners() {
   if (cachedBanners) return cachedBanners;
+
   try {
-    const q = query(collection(db, 'banners'), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
-    cachedBanners = [];
-    snap.forEach(d => cachedBanners.push({ id: d.id, ...d.data() }));
-    return cachedBanners;
-  } catch (err) {
-    console.error('Error fetching banners:', err);
-    return [];
+    const localData = localStorage.getItem('cache_banners');
+    if (localData) {
+      cachedBanners = JSON.parse(localData);
+    }
+  } catch (e) {
+    console.warn('Error reading banners cache from localStorage:', e);
   }
+
+  const fetchPromise = (async () => {
+    try {
+      const q = query(collection(db, 'banners'), orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q);
+      const freshBanners = [];
+      snap.forEach(d => freshBanners.push({ id: d.id, ...d.data() }));
+      cachedBanners = freshBanners;
+      try {
+        localStorage.setItem('cache_banners', JSON.stringify(freshBanners));
+      } catch (e) {}
+      return freshBanners;
+    } catch (err) {
+      console.error('Error fetching banners:', err);
+      return cachedBanners || [];
+    }
+  })();
+
+  if (cachedBanners) {
+    return cachedBanners;
+  }
+  return fetchPromise;
 }
 
 // Fetch All Categories
 export async function fetchCategories() {
   if (cachedCategories) return cachedCategories;
+
   try {
-    const snap = await getDocs(collection(db, 'categories'));
-    cachedCategories = [];
-    snap.forEach(d => {
-      const data = d.data();
-      cachedCategories.push({
-        id: d.id,
-        order: typeof data.order === 'number' ? data.order : 9999,
-        ...data
-      });
-    });
-    // Sort by order ascending, then by name alphabetically
-    cachedCategories.sort((a, b) => {
-      if (a.order !== b.order) {
-        return a.order - b.order;
-      }
-      return (a.name || '').localeCompare(b.name || '');
-    });
-    return cachedCategories;
-  } catch (err) {
-    console.error('Error fetching categories:', err);
-    return [];
+    const localData = localStorage.getItem('cache_categories');
+    if (localData) {
+      cachedCategories = JSON.parse(localData);
+    }
+  } catch (e) {
+    console.warn('Error reading categories cache from localStorage:', e);
   }
+
+  const fetchPromise = (async () => {
+    try {
+      const snap = await getDocs(collection(db, 'categories'));
+      const freshCategories = [];
+      snap.forEach(d => {
+        const data = d.data();
+        freshCategories.push({
+          id: d.id,
+          order: typeof data.order === 'number' ? data.order : 9999,
+          ...data
+        });
+      });
+      // Sort by order ascending, then by name alphabetically
+      freshCategories.sort((a, b) => {
+        if (a.order !== b.order) {
+          return a.order - b.order;
+        }
+        return (a.name || '').localeCompare(b.name || '');
+      });
+      cachedCategories = freshCategories;
+      try {
+        localStorage.setItem('cache_categories', JSON.stringify(freshCategories));
+      } catch (e) {}
+      return freshCategories;
+    } catch (err) {
+      console.error('Error fetching categories:', err);
+      return cachedCategories || [];
+    }
+  })();
+
+  if (cachedCategories) {
+    return cachedCategories;
+  }
+  return fetchPromise;
 }
 
 // Get current grid column count based on screen width
@@ -270,46 +320,104 @@ export async function fetchCategoryProducts(categoryName, limitCount) {
   if (limitCount === undefined) {
     limitCount = getCurrentGridColumns() * 2;
   }
-  try {
-    const colRef = collection(db, 'products');
-    let q;
-    if (categoryName && categoryName !== 'সব') {
-      q = query(colRef, where('category', '==', categoryName), limit(limitCount));
-    } else {
-      q = query(colRef, limit(limitCount));
-    }
 
-    const snap = await getDocs(q);
-    const products = [];
-    let lastDoc = null;
+  const cacheKey = `${categoryName || 'সব'}_${limitCount}`;
 
-    snap.forEach(d => {
-      products.push({ id: d.id, ...d.data() });
-      lastDoc = d;
-    });
-
-    if (categoryName) {
-      categoryCursors[categoryName] = {
-        lastDoc,
-        hasMore: products.length === limitCount
-      };
-    }
-
-    return { products, hasMore: products.length === limitCount };
-  } catch (err) {
-    console.error(`Error fetching products for category ${categoryName}:`, err);
-    return { products: [], hasMore: false };
+  if (cachedProductsByCategory[cacheKey]) {
+    return cachedProductsByCategory[cacheKey];
   }
+
+  let cachedResult = null;
+  try {
+    const localData = localStorage.getItem(`cache_products_${cacheKey}`);
+    if (localData) {
+      cachedResult = JSON.parse(localData);
+    }
+  } catch (e) {
+    console.warn('Error reading products cache from localStorage:', e);
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      const colRef = collection(db, 'products');
+      let q;
+      if (categoryName && categoryName !== 'সব') {
+        q = query(colRef, where('category', '==', categoryName), limit(limitCount));
+      } else {
+        q = query(colRef, limit(limitCount));
+      }
+
+      const snap = await getDocs(q);
+      const products = [];
+      let lastDoc = null;
+
+      snap.forEach(d => {
+        const prod = { id: d.id, ...d.data() };
+        products.push(prod);
+        cachedProductsMap[d.id] = prod;
+        lastDoc = d;
+      });
+
+      if (categoryName) {
+        categoryCursors[categoryName] = {
+          lastDoc,
+          hasMore: products.length === limitCount
+        };
+      }
+
+      const result = { products, hasMore: products.length === limitCount };
+      cachedProductsByCategory[cacheKey] = result;
+
+      try {
+        localStorage.setItem(`cache_products_${cacheKey}`, JSON.stringify(result));
+      } catch (e) {}
+
+      return result;
+    } catch (err) {
+      console.error(`Error fetching products for category ${categoryName}:`, err);
+      return cachedResult || { products: [], hasMore: false };
+    }
+  })();
+
+  if (cachedResult) {
+    return cachedResult;
+  }
+  return fetchPromise;
 }
 
 // Load Next Batch for a Category in Place ("আরও" link tap)
 export async function loadMoreCategoryProducts(categoryName, gridContainer, loadMoreBtn) {
   const cursorInfo = categoryCursors[categoryName];
-  if (!cursorInfo || !cursorInfo.lastDoc || !cursorInfo.hasMore) return;
+  const lastProductCard = gridContainer.querySelector('.product-card:last-child');
+  const lastProductId = lastProductCard?.dataset?.id;
+
+  let lastDoc = cursorInfo?.lastDoc;
 
   try {
     loadMoreBtn.classList.add('opacity-50', 'pointer-events-none');
     loadMoreBtn.textContent = 'লোড হচ্ছে...';
+
+    // Self-healing: if cursor is missing, or does not match the last product card visible in the grid,
+    // dynamically fetch the DocumentSnapshot for that product on-demand.
+    if (!lastDoc || (lastProductId && lastDoc.id !== lastProductId)) {
+      if (lastProductId) {
+        try {
+          const docSnap = await getDoc(doc(db, 'products', lastProductId));
+          if (docSnap.exists()) {
+            lastDoc = docSnap;
+          }
+        } catch (err) {
+          console.error('Error fetching dynamic lastDoc snapshot:', err);
+        }
+      }
+    }
+
+    if (!lastDoc) {
+      console.warn('Could not determine cursor (lastDoc) for category:', categoryName);
+      loadMoreBtn.classList.remove('opacity-50', 'pointer-events-none');
+      loadMoreBtn.innerHTML = `আরও <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>`;
+      return;
+    }
 
     const cols = getCurrentGridColumns();
     const limitCount = cols * 2;
@@ -317,17 +425,19 @@ export async function loadMoreCategoryProducts(categoryName, gridContainer, load
     const colRef = collection(db, 'products');
     let q;
     if (categoryName && categoryName !== 'সব') {
-      q = query(colRef, where('category', '==', categoryName), startAfter(cursorInfo.lastDoc), limit(limitCount));
+      q = query(colRef, where('category', '==', categoryName), startAfter(lastDoc), limit(limitCount));
     } else {
-      q = query(colRef, startAfter(cursorInfo.lastDoc), limit(limitCount));
+      q = query(colRef, startAfter(lastDoc), limit(limitCount));
     }
 
     const snap = await getDocs(q);
     const newProducts = [];
-    let newLastDoc = cursorInfo.lastDoc;
+    let newLastDoc = lastDoc;
 
     snap.forEach(d => {
-      newProducts.push({ id: d.id, ...d.data() });
+      const prod = { id: d.id, ...d.data() };
+      newProducts.push(prod);
+      cachedProductsMap[d.id] = prod;
       newLastDoc = d;
     });
 
@@ -380,10 +490,36 @@ export async function getProductById(productId) {
   if (!productId || typeof productId !== 'string') {
     return null;
   }
+  if (cachedProductsMap[productId]) {
+    return cachedProductsMap[productId];
+  }
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('cache_products_')) {
+        const data = localStorage.getItem(key);
+        if (data) {
+          const parsed = JSON.parse(data);
+          if (parsed && Array.isArray(parsed.products)) {
+            const found = parsed.products.find(p => p.id === productId);
+            if (found) {
+              cachedProductsMap[productId] = found;
+              return found;
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Error reading from local products cache:', e);
+  }
+
   try {
     const snap = await getDoc(doc(db, 'products', productId));
     if (snap.exists()) {
-      return { id: snap.id, ...snap.data() };
+      const prod = { id: snap.id, ...snap.data() };
+      cachedProductsMap[productId] = prod;
+      return prod;
     }
     return null;
   } catch (err) {

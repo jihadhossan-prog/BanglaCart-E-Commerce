@@ -43,7 +43,7 @@ import {
   getAppliedCoupon,
   removeCoupon
 } from './cart-checkout.js';
-import { initLiveChat, sendChatMessage } from './chat.js';
+import { initLiveChat, sendChatMessage, cleanupLiveChat } from './chat.js';
 import { db, collection, query, where, getDocs, getDoc, orderBy, onSnapshot, doc, updateDoc } from './firebase-config.js';
 
 let activeTab = 'home';
@@ -397,6 +397,7 @@ function updateUserNavDisplay(user, profile) {
 // Router & View Switcher
 async function renderView(tabName) {
   clearActiveCarouselIntervals();
+  cleanupLiveChat();
   activeTab = tabName;
   if (tabName !== 'checkout') {
     clearBuyNowItem();

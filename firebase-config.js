@@ -32,7 +32,8 @@ import {
   increment,
   arrayUnion,
   arrayRemove,
-  getCountFromServer
+  getCountFromServer,
+  enableIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -50,6 +51,20 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// Enable Firestore Offline Persistence
+if (typeof window !== 'undefined') {
+  enableIndexedDbPersistence(db)
+    .catch((err) => {
+      if (err.code === 'failed-precondition') {
+        console.warn("Firestore persistence failed-precondition: multiple tabs open.");
+      } else if (err.code === 'unimplemented') {
+        console.warn("Firestore persistence unimplemented: browser not supported.");
+      } else {
+        console.warn("Firestore persistence failed to enable:", err);
+      }
+    });
+}
 
 let analytics = null;
 if (typeof window !== 'undefined') {
