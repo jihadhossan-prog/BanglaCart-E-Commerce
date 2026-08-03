@@ -5,36 +5,35 @@ import { getApps, initializeApp, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { GoogleGenAI } from "@google/genai";
-import { GEMINI_API_KEY } from "./aiConfig.js";
+import dotenv from "dotenv";
+dotenv.config();
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
 
-  app.use(express.json());
+app.use(express.json());
 
-  // Initialize Firebase Admin if credentials available
-  try {
-    if (getApps().length === 0) {
-      if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-        initializeApp({
-          credential: cert(serviceAccount)
-        });
-      } else {
-        initializeApp();
-      }
+// Initialize Firebase Admin if credentials available
+try {
+  if (getApps().length === 0) {
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+      initializeApp({
+        credential: cert(serviceAccount)
+      });
+    } else {
+      initializeApp();
     }
-  } catch (e) {
-    console.warn("Firebase Admin initialize warning:", e);
   }
+} catch (e) {
+  console.warn("Firebase Admin initialize warning:", e);
+}
 
-  // API Routes
-  app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
-  });
+// API Routes
+app.get("/api/health", (_req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
 
-  app.post("/api/chat/ai", async (req, res) => {
+app.post("/api/chat/ai", async (req, res) => {
     const { message, history } = req.body;
     if (!message) {
       return res.status(400).json({ error: "Message is required." });
@@ -92,14 +91,11 @@ ${businessDetails.returnPolicy}
 If the user asks about products, help them politely. Answer any query about contact info, delivery times, return policies, or order steps using the information provided above. If you don't know the answer or if the query is unrelated, politely redirect them to contact human support or email.
 `;
 
-    // Retrieve API key
-    let apiKey = GEMINI_API_KEY;
-    if (!apiKey || apiKey === "YOUR_GEMINI_API_KEY_HERE") {
-      apiKey = process.env.GEMINI_API_KEY || "";
-    }
+    // Retrieve API key directly from environment variables
+    const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-      return res.status(500).json({ error: "Gemini API key is not configured. Please add it to aiConfig.js or environmental variables." });
+      return res.status(500).json({ error: "GEMINI_API_KEY is not configured in environment variables." });
     }
 
     try {
@@ -131,7 +127,7 @@ If the user asks about products, help them politely. Answer any query about cont
       });
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: "gemini-2.5-flash",
         contents: contents,
         config: {
           systemInstruction: systemInstruction,
@@ -146,16 +142,19 @@ If the user asks about products, help them politely. Answer any query about cont
     }
   });
 
-  // Admin route fallback for cleaner URLs
-  app.get("/admin", (_req, res, next) => {
-    if (process.env.NODE_ENV === "production") {
-      res.sendFile(path.join(process.cwd(), "dist", "admin.html"));
-    } else {
-      next();
-    }
-  });
+// Admin route fallback for cleaner URLs
+app.get("/admin", (_req, res, next) => {
+  if (process.env.NODE_ENV === "production") {
+    res.sendFile(path.join(process.cwd(), "dist", "admin.html"));
+  } else {
+    next();
+  }
+});
 
-  // Vite middleware in development, static files in production
+// Setup development server or static file serving when not in a Vercel Serverless environment
+async function startServer() {
+  const PORT = 3000;
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -175,4 +174,9 @@ If the user asks about products, help them politely. Answer any query about cont
   });
 }
 
-startServer();
+// Only start the HTTP server listener if NOT running as a Vercel Serverless Function
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
